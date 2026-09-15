@@ -582,3 +582,26 @@ fn a_reopened_vault_produces_the_same_watermark() {
 
     std::fs::remove_dir_all(&dir).ok();
 }
+
+#[cfg(unix)]
+#[test]
+fn the_vault_and_its_backup_are_owner_only() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let dir = scratch_dir();
+    let path = dir.join("vault.obscura");
+    let mut vault = seeded_vault();
+    vault.save(&path).unwrap();
+    vault.save(&path).unwrap();
+
+    for name in ["vault.obscura", "vault.obscura.bak"] {
+        let target = dir.join(name);
+        let mode = std::fs::metadata(&target).unwrap().permissions().mode() & 0o777;
+        assert_eq!(
+            mode, 0o600,
+            "{name} is mode {mode:o}, so every other account on this machine can read the ciphertext"
+        );
+    }
+
+    std::fs::remove_dir_all(&dir).ok();
+}
