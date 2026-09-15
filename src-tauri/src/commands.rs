@@ -570,7 +570,7 @@ pub fn relocate_vault(
     })?;
 
     let previous_removed = std::fs::remove_file(&previous).is_ok();
-    let _ = std::fs::remove_file(previous.with_extension("bak"));
+    let _ = std::fs::remove_file(obscura_vault::backup_path(&previous));
 
     apply_remember(&app, &target, remember);
 

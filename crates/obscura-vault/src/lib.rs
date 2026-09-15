@@ -16,4 +16,4 @@ pub use generator::{PasswordPolicy, Separator};
 pub use recovery::RecoveryCode;
 pub use secret::SecretString;
 pub use totp::{Totp, TotpAlgorithm};
-pub use vault::{Credential, Vault};
+pub use vault::{backup_path, temp_path, Credential, Vault};
