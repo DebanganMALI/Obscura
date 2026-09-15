@@ -65,6 +65,68 @@ function initials(title) {
   return words[0][0] + words[1][0];
 }
 
+function errText(err) {
+  if (err && typeof err === "object" && typeof err.message === "string") return err.message;
+  return String(err);
+}
+
+function confirmRevision(detail) {
+  return new Promise((resolve) => {
+    const scrim = $("rb-scrim");
+    const typed = $("rb-typed");
+    const error = $("rb-error");
+    const accept = $("rb-accept");
+    const cancel = $("rb-cancel");
+    const rollback = detail.confirm.reason === "rollback";
+    const expected = detail.confirm.expected;
+
+    $("rb-title").textContent = rollback
+      ? "This vault looks older than it should"
+      : "The rollback record does not match";
+    $("rb-lede").textContent = rollback
+      ? "Obscura has seen a newer version of this vault on this computer."
+      : "Obscura cannot tell whether this file has been rolled back.";
+    $("rb-found").textContent = String(detail.confirm.found);
+    $("rb-expected").textContent = expected === null || expected === undefined ? "-" : String(expected);
+    $("rb-expected-box").hidden = expected === null || expected === undefined;
+    $("rb-why").textContent = detail.message;
+
+    typed.value = "";
+    error.textContent = "";
+    scrim.hidden = false;
+    typed.focus();
+
+    function close(value) {
+      scrim.hidden = true;
+      accept.removeEventListener("click", onAccept);
+      cancel.removeEventListener("click", onCancel);
+      typed.removeEventListener("keydown", onKey);
+      resolve(value);
+    }
+    function onAccept() {
+      if (typed.value.trim() !== String(detail.confirm.found)) {
+        error.textContent = "Type " + detail.confirm.found + " exactly to continue.";
+        typed.select();
+        return;
+      }
+      close(detail.confirm.found);
+    }
+    function onCancel() {
+      close(null);
+    }
+    function onKey(event) {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        onAccept();
+      }
+    }
+
+    accept.addEventListener("click", onAccept);
+    cancel.addEventListener("click", onCancel);
+    typed.addEventListener("keydown", onKey);
+  });
+}
+
 let gateMode = "unlock";
 let gatePath = null;
 let gateProbe = null;
@@ -216,13 +278,27 @@ $("gate-form").addEventListener("submit", async (event) => {
       delete args.password;
     }
 
-    state.info = await invoke(command, args);
+    let info;
+    try {
+      info = await invoke(command, args);
+    } catch (err) {
+      if (!err || !err.confirm) throw err;
+      const accepted = await confirmRevision(err);
+      if (accepted === null) {
+        error.textContent = "Left as it is. Nothing was opened or changed.";
+        return;
+      }
+      args.acceptRevision = accepted;
+      info = await invoke(command, args);
+    }
+
+    state.info = info;
     $("gate-password").value = "";
     $("gate-confirm").value = "";
     enterApp();
     if (creating) await openRecovery(true);
   } catch (err) {
-    error.textContent = String(err);
+    error.textContent = errText(err);
     $("gate-password").select();
   } finally {
     submit.disabled = false;

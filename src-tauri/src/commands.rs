@@ -18,10 +18,12 @@ use crate::{
     clipboard,
     dto::{
         CustomFieldView, EntryDetail, EntryInput, EntrySummary, GeneratedPassword,
-        IssuedRecoveryCode, LocationProbe, RelocateResult, SlotView, TotpCode, VaultInfo,
+        IssuedRecoveryCode, LocationProbe, RelocateResult, SlotView, TotpCode, UnlockError,
+        VaultInfo,
     },
     location,
     state::{AppState, Session},
+    watermark,
 };
 
 fn default_vault_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
@@ -76,6 +78,37 @@ fn info(session: &Session, auto_lock_secs: u64) -> VaultInfo {
     }
 }
 
+fn persist(
+    app: &tauri::AppHandle,
+    session: &mut Session,
+    path: &std::path::Path,
+) -> Result<(), String> {
+    session.vault.save(path).map_err(|e| e.to_string())?;
+    session.min_revision = session.vault.revision();
+    watermark::record(app, &session.vault)
+}
+
+fn admit(
+    app: &tauri::AppHandle,
+    vault: &Vault,
+    accept_revision: Option<u64>,
+) -> Result<(), UnlockError> {
+    match watermark::check(app, vault) {
+        watermark::Verdict::Fresh | watermark::Verdict::Current => {}
+        watermark::Verdict::Tampered => {
+            if accept_revision != Some(vault.revision()) {
+                return Err(UnlockError::damaged(vault.revision()));
+            }
+        }
+        watermark::Verdict::Rollback { found, expected } => {
+            if accept_revision != Some(found) {
+                return Err(UnlockError::rollback(found, expected));
+            }
+        }
+    }
+    watermark::record(app, vault).map_err(UnlockError::message)
+}
+
 #[tauri::command]
 pub fn vault_exists(app: tauri::AppHandle, path: Option<String>) -> Result<bool, String> {
     Ok(resolve(&app, path)?.exists())
@@ -127,6 +160,7 @@ pub fn create_vault(
 
     let mut vault = Vault::create(password.as_bytes(), params).map_err(|e| e.to_string())?;
     vault.save(&target).map_err(|e| e.to_string())?;
+    watermark::record(&app, &vault)?;
     apply_remember(&app, &target, remember);
 
     let revision = vault.revision();
@@ -148,9 +182,10 @@ pub fn unlock(
     path: Option<String>,
     password: String,
     remember: Option<bool>,
-) -> Result<VaultInfo, String> {
+    accept_revision: Option<u64>,
+) -> Result<VaultInfo, UnlockError> {
     let password = Zeroizing::new(password);
-    let target = resolve(&app, path)?;
+    let target = resolve(&app, path).map_err(UnlockError::message)?;
 
     if !target.exists() {
         let hint = match target.parent() {
@@ -160,11 +195,15 @@ pub fn unlock(
             ),
             _ => String::new(),
         };
-        return Err(format!("no vault found at {}{hint}", target.display()));
+        return Err(UnlockError::message(format!(
+            "no vault found at {}{hint}",
+            target.display()
+        )));
     }
 
     let vault = Vault::open(&target, &Credential::Password(password.as_bytes()), None)
-        .map_err(|_| "could not unlock the vault with that password".to_owned())?;
+        .map_err(|_| UnlockError::message("could not unlock the vault with that password"))?;
+    admit(&app, &vault, accept_revision)?;
     apply_remember(&app, &target, remember);
 
     let revision = vault.revision();
@@ -277,7 +316,11 @@ pub fn copy_text(text: String, clear_after: Option<u64>) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub fn save_entry(state: State<'_, AppState>, input: EntryInput) -> Result<Uuid, String> {
+pub fn save_entry(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    input: EntryInput,
+) -> Result<Uuid, String> {
     let id = state.with_session(|session| {
         let id = if let Some(existing) = input.id {
             let entry = session.vault.get_mut(existing).ok_or("no such entry")?;
@@ -289,8 +332,7 @@ pub fn save_entry(state: State<'_, AppState>, input: EntryInput) -> Result<Uuid,
             session.vault.add(entry).map_err(|e| e.to_string())?
         };
         let path = session.path.clone();
-        session.vault.save(&path).map_err(|e| e.to_string())?;
-        session.min_revision = session.vault.revision();
+        persist(&app, session, &path)?;
         Ok(id)
     })?;
     Ok(id)
@@ -319,12 +361,15 @@ fn apply(entry: &mut Entry, input: &EntryInput) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub fn delete_entry(state: State<'_, AppState>, id: Uuid) -> Result<(), String> {
+pub fn delete_entry(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    id: Uuid,
+) -> Result<(), String> {
     state.with_session(|session| {
         session.vault.remove(id).map_err(|e| e.to_string())?;
         let path = session.path.clone();
-        session.vault.save(&path).map_err(|e| e.to_string())?;
-        session.min_revision = session.vault.revision();
+        persist(&app, session, &path)?;
         Ok(())
     })
 }
@@ -372,6 +417,7 @@ pub fn generate(
 
 #[tauri::command]
 pub fn change_master_password(
+    app: tauri::AppHandle,
     state: State<'_, AppState>,
     current: String,
     new: String,
@@ -396,8 +442,7 @@ pub fn change_master_password(
             .change_password(new.as_bytes(), None)
             .map_err(|e| e.to_string())?;
         let path = session.path.clone();
-        session.vault.save(&path).map_err(|e| e.to_string())?;
-        session.min_revision = session.vault.revision();
+        persist(&app, session, &path)?;
         Ok(())
     })
 }
@@ -532,6 +577,7 @@ pub fn relocate_vault(
 
         session.path.clone_from(&target);
         session.min_revision = session.vault.revision();
+        watermark::record(&app, &session.vault)?;
         Ok((info(session, secs), previous))
     })?;
 
@@ -549,6 +595,7 @@ pub fn relocate_vault(
 
 #[tauri::command]
 pub fn create_recovery_code(
+    app: tauri::AppHandle,
     state: State<'_, AppState>,
     label: String,
 ) -> Result<IssuedRecoveryCode, String> {
@@ -564,8 +611,7 @@ pub fn create_recovery_code(
             .add_recovery_slot(label)
             .map_err(|e| e.to_string())?;
         let path = session.path.clone();
-        session.vault.save(&path).map_err(|e| e.to_string())?;
-        session.min_revision = session.vault.revision();
+        persist(&app, session, &path)?;
         Ok(IssuedRecoveryCode {
             slot,
             code: code.to_printable(),
@@ -590,16 +636,22 @@ pub fn unlock_with_recovery(
     path: Option<String>,
     code: String,
     remember: Option<bool>,
-) -> Result<VaultInfo, String> {
-    let parsed = RecoveryCode::parse(code.trim()).map_err(|e| e.to_string())?;
-    let target = resolve(&app, path)?;
+    accept_revision: Option<u64>,
+) -> Result<VaultInfo, UnlockError> {
+    let parsed =
+        RecoveryCode::parse(code.trim()).map_err(|e| UnlockError::message(e.to_string()))?;
+    let target = resolve(&app, path).map_err(UnlockError::message)?;
 
     if !target.exists() {
-        return Err(format!("no vault found at {}", target.display()));
+        return Err(UnlockError::message(format!(
+            "no vault found at {}",
+            target.display()
+        )));
     }
 
     let vault = Vault::open(&target, &Credential::Identity(&parsed.identity()), None)
-        .map_err(|_| "that recovery code does not open this vault".to_owned())?;
+        .map_err(|_| UnlockError::message("that recovery code does not open this vault"))?;
+    admit(&app, &vault, accept_revision)?;
     apply_remember(&app, &target, remember);
 
     let revision = vault.revision();
@@ -615,13 +667,16 @@ pub fn unlock_with_recovery(
 }
 
 #[tauri::command]
-pub fn remove_slot(state: State<'_, AppState>, id: Uuid) -> Result<VaultInfo, String> {
+pub fn remove_slot(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    id: Uuid,
+) -> Result<VaultInfo, String> {
     let secs = state.auto_lock().as_secs();
     state.with_session(|session| {
         session.vault.remove_slot(id).map_err(|e| e.to_string())?;
         let path = session.path.clone();
-        session.vault.save(&path).map_err(|e| e.to_string())?;
-        session.min_revision = session.vault.revision();
+        persist(&app, session, &path)?;
         Ok(info(session, secs))
     })
 }

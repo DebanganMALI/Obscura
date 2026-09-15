@@ -519,3 +519,66 @@ fn changing_the_password_does_not_disturb_a_recovery_code() {
     assert!(Vault::from_bytes(&bytes, &Credential::Identity(&code.identity()), None).is_ok());
     assert!(Vault::from_bytes(&bytes, &Credential::Password(PASSWORD), None).is_err());
 }
+
+#[test]
+fn a_watermark_tag_is_stable_for_one_vault_and_revision() {
+    let vault = seeded_vault();
+    let first = vault.watermark_tag(7).unwrap();
+    let second = vault.watermark_tag(7).unwrap();
+    assert_eq!(first, second);
+    assert!(vault.verify_watermark(7, &first).unwrap());
+}
+
+#[test]
+fn a_watermark_tag_is_bound_to_the_revision() {
+    let vault = seeded_vault();
+    let seven = vault.watermark_tag(7).unwrap();
+    let eight = vault.watermark_tag(8).unwrap();
+    assert_ne!(seven, eight);
+    assert!(!vault.verify_watermark(8, &seven).unwrap());
+}
+
+#[test]
+fn a_watermark_tag_is_bound_to_the_vault() {
+    let mine = seeded_vault();
+    let theirs = seeded_vault();
+    let tag = mine.watermark_tag(7).unwrap();
+    assert!(
+        !theirs.verify_watermark(7, &tag).unwrap(),
+        "a watermark lifted from another vault must not verify, or an attacker could \
+         transplant a low revision record onto a vault they want to roll back"
+    );
+}
+
+#[test]
+fn changing_the_master_password_keeps_watermarks_verifiable() {
+    let mut vault = seeded_vault();
+    let tag = vault.watermark_tag(3).unwrap();
+    vault
+        .change_password(b"a different master password", None)
+        .unwrap();
+    assert!(
+        vault.verify_watermark(3, &tag).unwrap(),
+        "the watermark key comes from the vault key, which a password change rewraps \
+         rather than replaces - otherwise every password change would look like tampering"
+    );
+}
+
+#[test]
+fn a_reopened_vault_produces_the_same_watermark() {
+    let dir = scratch_dir();
+    let path = dir.join("vault.obscura");
+
+    let mut vault = seeded_vault();
+    vault.save(&path).unwrap();
+    let revision = vault.revision();
+    let tag = vault.watermark_tag(revision).unwrap();
+
+    let reopened = Vault::open(&path, &Credential::Password(PASSWORD), None).unwrap();
+    assert!(
+        reopened.verify_watermark(revision, &tag).unwrap(),
+        "the watermark must survive a save and reopen or it would fire on every launch"
+    );
+
+    std::fs::remove_dir_all(&dir).ok();
+}

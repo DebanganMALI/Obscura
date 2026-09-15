@@ -3,7 +3,7 @@ use std::{fs, io::Write as _, path::Path};
 use obscura_crypto::{
     aead, derive,
     hybrid::{self, HybridSecretKey},
-    kdf, KdfParams, SecretBytes, SecretKey,
+    kdf, mac, KdfParams, SecretBytes, SecretKey, KEY_LEN,
 };
 use time::OffsetDateTime;
 use uuid::Uuid;
@@ -16,6 +16,15 @@ use crate::{
     },
     recovery::RecoveryCode,
 };
+
+const WATERMARK_INFO: &[u8] = b"obscura/anti-rollback/v1";
+
+fn watermark_data(vault_id: Uuid, revision: u64) -> Vec<u8> {
+    let mut data = Vec::with_capacity(24);
+    data.extend_from_slice(vault_id.as_bytes());
+    data.extend_from_slice(&revision.to_le_bytes());
+    data
+}
 
 pub struct Vault {
     header: VaultHeader,
@@ -281,6 +290,27 @@ impl Vault {
     #[must_use]
     pub const fn revision(&self) -> u64 {
         self.header.revision
+    }
+
+    pub fn watermark_tag(&self, revision: u64) -> Result<[u8; mac::TAG_LEN], VaultError> {
+        let key = derive::subkey::<KEY_LEN>(&self.key, None, WATERMARK_INFO)?;
+        Ok(mac::tag(
+            &key,
+            &watermark_data(self.header.vault_id, revision),
+        ))
+    }
+
+    pub fn verify_watermark(
+        &self,
+        revision: u64,
+        expected: &[u8; mac::TAG_LEN],
+    ) -> Result<bool, VaultError> {
+        let key = derive::subkey::<KEY_LEN>(&self.key, None, WATERMARK_INFO)?;
+        Ok(mac::verify(
+            &key,
+            &watermark_data(self.header.vault_id, revision),
+            expected,
+        ))
     }
 
     #[must_use]

@@ -131,3 +131,53 @@ pub struct IssuedRecoveryCode {
     pub slot: Uuid,
     pub code: String,
 }
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ConfirmRevision {
+    pub reason: String,
+    pub found: u64,
+    pub expected: Option<u64>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UnlockError {
+    pub message: String,
+    pub confirm: Option<ConfirmRevision>,
+}
+
+impl UnlockError {
+    pub fn message(text: impl Into<String>) -> Self {
+        Self {
+            message: text.into(),
+            confirm: None,
+        }
+    }
+
+    pub fn rollback(found: u64, expected: u64) -> Self {
+        Self {
+            message: format!(
+                "This vault file is at revision {found}, but Obscura last saw revision {expected} on this computer. Opening it would discard every change made after revision {found}."
+            ),
+            confirm: Some(ConfirmRevision {
+                reason: "rollback".to_owned(),
+                found,
+                expected: Some(expected),
+            }),
+        }
+    }
+
+    pub fn damaged(found: u64) -> Self {
+        Self {
+            message: format!(
+                "The rollback record for this vault is damaged or does not belong to it, so Obscura cannot tell whether this file has been rolled back. The file itself is at revision {found}."
+            ),
+            confirm: Some(ConfirmRevision {
+                reason: "damaged".to_owned(),
+                found,
+                expected: None,
+            }),
+        }
+    }
+}
