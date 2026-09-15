@@ -175,13 +175,29 @@
       </div>
 
       <div class="field">
-        <label class="field__label" for="e-url">Website</label>
-        <input class="input" id="e-url" placeholder="https://" spellcheck="false">
+        <label class="field__label" for="e-kind">Kind</label>
+        <select class="select" id="e-kind">
+          <option value="login">Login</option>
+          <option value="note">Note</option>
+          <option value="card">Card</option>
+          <option value="identity">Identity</option>
+          <option value="key">Key</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label class="field__label" for="e-url">Websites</label>
+        <textarea class="textarea textarea--short" id="e-url" placeholder="https://" spellcheck="false"></textarea>
+        <p class="hint">One address per line.</p>
       </div>
 
       <div class="field">
         <label class="field__label" for="e-totp">Two-factor URI</label>
         <input class="input input--mono" id="e-totp" placeholder="otpauth://totp/..." spellcheck="false">
+        <p class="hint" id="e-totp-hint"></p>
+        <label class="check" id="e-totp-drop-row" hidden>
+          <input type="checkbox" id="e-totp-drop"> Remove the stored code
+        </label>
       </div>
 
       <div class="field">

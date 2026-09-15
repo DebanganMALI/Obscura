@@ -341,8 +341,10 @@ fn apply(entry: &mut Entry, input: &EntryInput) -> Result<(), String> {
     entry.tags.clone_from(&input.tags);
     entry.favorite = input.favorite;
 
-    if let Some(uri) = input.totp_uri.as_ref().filter(|u| !u.trim().is_empty()) {
-        entry.totp = Some(Totp::from_uri(uri.trim()).map_err(|e| e.to_string())?);
+    match input.totp_uri.as_deref().map(str::trim) {
+        Some("") => entry.totp = None,
+        Some(uri) => entry.totp = Some(Totp::from_uri(uri).map_err(|e| e.to_string())?),
+        None => {}
     }
 
     if let Some(password) = input.password.as_ref() {
@@ -738,4 +740,82 @@ pub fn hello_isolation_setup() -> Result<String, String> {
     Ok(format!(
         "Test credential left in place.\n\nName: {name}\nPublic key: {print}\n\nNow run the scope probe from a terminal. If it prints the same fingerprint, a Hello credential is not private to the app that made it."
     ))
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod tests {
+    use super::*;
+
+    const URI: &str = "otpauth://totp/GitHub:saheb?secret=JBSWY3DPEHPK3PXP&issuer=GitHub";
+
+    fn input() -> EntryInput {
+        EntryInput {
+            id: None,
+            kind: obscura_vault::EntryKind::Login,
+            title: "GitHub".to_owned(),
+            username: "saheb".to_owned(),
+            password: None,
+            urls: Vec::new(),
+            notes: String::new(),
+            tags: Vec::new(),
+            favorite: false,
+            totp_uri: None,
+        }
+    }
+
+    #[test]
+    fn every_address_the_editor_sent_is_kept() {
+        let mut entry = Entry::new_login("GitHub", "saheb");
+        let mut sent = input();
+        sent.urls = vec![
+            "https://github.com".to_owned(),
+            "https://gist.github.com".to_owned(),
+            "https://github.dev".to_owned(),
+        ];
+
+        apply(&mut entry, &sent).unwrap();
+
+        assert_eq!(
+            entry.urls, sent.urls,
+            "the editor used to send only the first address, so saving an entry silently \
+             dropped every other one it had"
+        );
+    }
+
+    #[test]
+    fn the_kind_is_whatever_the_editor_sent() {
+        let mut entry = Entry::new_login("Passport", "");
+        let mut sent = input();
+        sent.kind = obscura_vault::EntryKind::Identity;
+
+        apply(&mut entry, &sent).unwrap();
+
+        assert_eq!(entry.kind, obscura_vault::EntryKind::Identity);
+    }
+
+    #[test]
+    fn a_two_factor_code_can_be_added_kept_and_removed() {
+        let mut entry = Entry::new_login("GitHub", "saheb");
+
+        let mut adding = input();
+        adding.totp_uri = Some(URI.to_owned());
+        apply(&mut entry, &adding).unwrap();
+        assert!(entry.totp.is_some());
+
+        apply(&mut entry, &input()).unwrap();
+        assert!(
+            entry.totp.is_some(),
+            "no field means the editor did not touch the code"
+        );
+
+        let mut removing = input();
+        removing.totp_uri = Some("   ".to_owned());
+        apply(&mut entry, &removing).unwrap();
+        assert!(
+            entry.totp.is_none(),
+            "an empty field is the only way to take a code off an entry, and before this \
+             there was none - once added, a code could never be removed"
+        );
+    }
 }
