@@ -739,6 +739,41 @@ async function removeSlot(slot) {
   }
 }
 
+$("s-hello-test").addEventListener("click", async () => {
+  const error = $("s-slots-error");
+  error.textContent = "";
+  const button = $("s-hello-test");
+  button.disabled = true;
+  button.textContent = "Prompting...";
+  try {
+    toast(await invoke("hello_selftest"));
+  } catch (err) {
+    error.textContent = String(err);
+  } finally {
+    button.disabled = false;
+    button.textContent = "Test Windows Hello";
+  }
+});
+
+$("s-hello-scope").addEventListener("click", async () => {
+  const error = $("s-slots-error");
+  const out = $("s-hello-out");
+  error.textContent = "";
+  const button = $("s-hello-scope");
+  button.disabled = true;
+  button.textContent = "Prompting...";
+  try {
+    out.textContent = await invoke("hello_isolation_setup");
+    out.hidden = false;
+  } catch (err) {
+    out.hidden = true;
+    error.textContent = String(err);
+  } finally {
+    button.disabled = false;
+    button.textContent = "Test credential isolation";
+  }
+});
+
 $("s-add-recovery").addEventListener("click", async () => {
   $("s-slots-error").textContent = "";
   await openRecovery(false);

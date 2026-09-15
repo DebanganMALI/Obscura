@@ -50,6 +50,8 @@ pub fn run() {
             commands::verify_recovery_code,
             commands::unlock_with_recovery,
             commands::remove_slot,
+            commands::hello_selftest,
+            commands::hello_isolation_setup,
         ])
         .setup(|app| {
             spawn_auto_lock_clock(app.handle().clone());

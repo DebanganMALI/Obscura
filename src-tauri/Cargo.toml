@@ -21,18 +21,19 @@ path = "src/main.rs"
 workspace = true
 
 [build-dependencies]
-tauri-build = { workspace = true }
+tauri-build      = { workspace = true }
 
 [dependencies]
-obscura-crypto = { workspace = true }
-obscura-vault  = { workspace = true }
-tauri          = { workspace = true }
+obscura-crypto   = { workspace = true }
+obscura-vault    = { workspace = true }
+obscura-platform = { workspace = true }
+tauri            = { workspace = true }
 tauri-plugin-dialog = { workspace = true }
-arboard        = { workspace = true }
-serde          = { workspace = true }
-serde_json     = { workspace = true }
-uuid           = { workspace = true }
-time           = { workspace = true }
-zeroize        = { workspace = true }
-subtle         = { workspace = true }
-thiserror      = { workspace = true }
+arboard          = { workspace = true }
+serde            = { workspace = true }
+serde_json       = { workspace = true }
+uuid             = { workspace = true }
+time             = { workspace = true }
+zeroize          = { workspace = true }
+subtle           = { workspace = true }
+thiserror        = { workspace = true }
