@@ -1,0 +1,101 @@
+use obscura_vault::{Entry, EntryKind};
+use serde::{Deserialize, Serialize};
+use uuid::Uuid;
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EntrySummary {
+    pub id: Uuid,
+    pub kind: EntryKind,
+    pub title: String,
+    pub username: String,
+    pub url: Option<String>,
+    pub has_totp: bool,
+    pub favorite: bool,
+    pub password_age_days: Option<i64>,
+    pub tags: Vec<String>,
+}
+
+impl From<&Entry> for EntrySummary {
+    fn from(entry: &Entry) -> Self {
+        Self {
+            id: entry.id,
+            kind: entry.kind,
+            title: entry.title.clone(),
+            username: entry.username.clone(),
+            url: entry.urls.first().cloned(),
+            has_totp: entry.totp.is_some(),
+            favorite: entry.favorite,
+            password_age_days: entry.password_age_days(),
+            tags: entry.tags.clone(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EntryDetail {
+    #[serde(flatten)]
+    pub summary: EntrySummary,
+    pub urls: Vec<String>,
+    pub notes: String,
+    pub custom_fields: Vec<CustomFieldView>,
+    pub password_len: usize,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CustomFieldView {
+    pub name: String,
+    pub value: Option<String>,
+    pub hidden: bool,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EntryInput {
+    pub id: Option<Uuid>,
+    pub kind: EntryKind,
+    pub title: String,
+    pub username: String,
+    pub password: Option<String>,
+    pub urls: Vec<String>,
+    pub notes: String,
+    pub tags: Vec<String>,
+    pub favorite: bool,
+    pub totp_uri: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct VaultInfo {
+    pub id: Uuid,
+    pub revision: u64,
+    pub entry_count: usize,
+    pub slots: Vec<SlotView>,
+    pub path: String,
+    pub auto_lock_secs: u64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SlotView {
+    pub id: Uuid,
+    pub kind: String,
+    pub label: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GeneratedPassword {
+    pub password: String,
+    pub entropy_bits: f64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TotpCode {
+    pub code: String,
+    pub remaining: u64,
+    pub period: u64,
+}
