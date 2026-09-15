@@ -6,10 +6,24 @@ rust-version.workspace = true
 license.workspace      = true
 repository.workspace   = true
 authors.workspace      = true
+description            = "Cryptographic primitives for Obscura."
 
 [lints]
 workspace = true
 
+[features]
+default = ["calibrate"]
+calibrate = []
+
 [dependencies]
-thiserror = { workspace = true }
-zeroize   = { workspace = true }
+argon2           = { workspace = true }
+chacha20poly1305 = { workspace = true }
+hkdf             = { workspace = true }
+sha2             = { workspace = true }
+blake3           = { workspace = true }
+x25519-dalek     = { workspace = true }
+ml-kem           = { workspace = true }
+subtle           = { workspace = true }
+zeroize          = { workspace = true }
+rand_core        = { workspace = true }
+thiserror        = { workspace = true }
