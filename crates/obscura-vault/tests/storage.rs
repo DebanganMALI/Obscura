@@ -641,3 +641,52 @@ fn the_backup_helper_names_the_file_save_actually_writes() {
 
     std::fs::remove_dir_all(&dir).ok();
 }
+
+#[test]
+fn a_credential_can_be_checked_against_the_open_vault_without_touching_the_disk() {
+    let mut vault = seeded_vault();
+    let (_, code) = vault.add_recovery_slot("Recovery code").unwrap();
+
+    assert!(vault.accepts(&Credential::Password(PASSWORD)).unwrap());
+    assert!(vault
+        .accepts(&Credential::Identity(&code.identity()))
+        .unwrap());
+
+    assert!(!vault.accepts(&Credential::Password(b"wrong")).unwrap());
+    assert!(!vault
+        .accepts(&Credential::Identity(&new_recovery_identity().unwrap()))
+        .unwrap());
+}
+
+#[test]
+fn a_recovery_code_can_be_confirmed_before_the_slot_is_ever_written() {
+    let dir = scratch_dir();
+    let path = dir.join("vault.obscura");
+
+    let mut vault = seeded_vault();
+    vault.save(&path).unwrap();
+
+    let (slot, code) = vault.add_recovery_slot("Recovery code").unwrap();
+    assert!(
+        vault
+            .accepts(&Credential::Identity(&code.identity()))
+            .unwrap(),
+        "the code has to be checkable while the slot is still only in memory, or confirming \
+         it would require saving it first - and a slot saved before the user confirms it \
+         counts as portable even though nobody has written it down"
+    );
+
+    let on_disk = Vault::open(&path, &Credential::Password(PASSWORD), None).unwrap();
+    assert!(
+        !on_disk
+            .accepts(&Credential::Identity(&code.identity()))
+            .unwrap(),
+        "nothing was saved, so the file must not carry the unconfirmed slot"
+    );
+    assert_eq!(on_disk.slots().len(), 1);
+
+    vault.remove_slot(slot).unwrap();
+    assert_eq!(vault.slots().len(), 1);
+
+    std::fs::remove_dir_all(&dir).ok();
+}

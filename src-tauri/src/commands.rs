@@ -105,6 +105,12 @@ fn admit(
                 return Err(UnlockError::rollback(found, expected));
             }
         }
+        watermark::Verdict::Unreadable(detail) => {
+            if accept_revision != Some(vault.revision()) {
+                return Err(UnlockError::unreadable(vault.revision(), detail));
+            }
+            return watermark::reset_to(app, vault).map_err(UnlockError::message);
+        }
     }
     watermark::record(app, vault).map_err(UnlockError::message)
 }
@@ -583,7 +589,6 @@ pub fn relocate_vault(
 
 #[tauri::command]
 pub fn create_recovery_code(
-    app: tauri::AppHandle,
     state: State<'_, AppState>,
     label: String,
 ) -> Result<IssuedRecoveryCode, String> {
@@ -598,8 +603,6 @@ pub fn create_recovery_code(
             .vault
             .add_recovery_slot(label)
             .map_err(|e| e.to_string())?;
-        let path = session.path.clone();
-        persist(&app, session, &path)?;
         Ok(IssuedRecoveryCode {
             slot,
             code: code.to_printable(),
@@ -608,13 +611,36 @@ pub fn create_recovery_code(
 }
 
 #[tauri::command]
-pub fn verify_recovery_code(state: State<'_, AppState>, code: String) -> Result<(), String> {
+pub fn confirm_recovery_code(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    code: String,
+) -> Result<VaultInfo, String> {
     let parsed = RecoveryCode::parse(code.trim()).map_err(|e| e.to_string())?;
-    let path = state.with_session(|session| Ok(session.path.clone()))?;
+    let identity = parsed.identity();
+    let secs = state.auto_lock().as_secs();
 
-    Vault::open(&path, &Credential::Identity(&parsed.identity()), None)
-        .map_err(|_| "that code does not open this vault".to_owned())?;
-    Ok(())
+    state.with_session(|session| {
+        if !session
+            .vault
+            .accepts(&Credential::Identity(&identity))
+            .map_err(|e| e.to_string())?
+        {
+            return Err("that code does not open this vault".to_owned());
+        }
+        let path = session.path.clone();
+        persist(&app, session, &path)?;
+        Ok(info(session, secs))
+    })
+}
+
+#[tauri::command]
+pub fn discard_recovery_code(state: State<'_, AppState>, id: Uuid) -> Result<VaultInfo, String> {
+    let secs = state.auto_lock().as_secs();
+    state.with_session(|session| {
+        session.vault.remove_slot(id).map_err(|e| e.to_string())?;
+        Ok(info(session, secs))
+    })
 }
 
 #[tauri::command]
