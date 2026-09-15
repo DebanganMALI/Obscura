@@ -2,6 +2,7 @@
 
 use obscura_crypto::KdfParams;
 use obscura_vault::{
+    backup_path,
     entry::Entry,
     format::{self, SlotKind},
     vault::{new_recovery_identity, Credential},
@@ -602,6 +603,41 @@ fn the_vault_and_its_backup_are_owner_only() {
             "{name} is mode {mode:o}, so every other account on this machine can read the ciphertext"
         );
     }
+
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn the_backup_helper_names_the_file_save_actually_writes() {
+    let dir = scratch_dir();
+    let path = dir.join("vault.obscura");
+    let mut vault = seeded_vault();
+    vault.save(&path).unwrap();
+    vault.save(&path).unwrap();
+
+    let backup = backup_path(&path);
+    assert_eq!(backup.file_name().unwrap(), "vault.obscura.bak");
+    assert!(backup.exists());
+
+    assert!(
+        !path.with_extension("bak").exists(),
+        "with_extension(\"bak\") replaces the last extension and yields vault.bak, which is \
+         not what save writes - relocate used that spelling and so left the real backup, a \
+         complete older copy of the vault, sitting at the old location"
+    );
+
+    let mut found: Vec<String> = std::fs::read_dir(&dir)
+        .unwrap()
+        .filter_map(Result::ok)
+        .map(|e| e.file_name().to_string_lossy().into_owned())
+        .filter(|name| {
+            std::path::Path::new(name)
+                .extension()
+                .is_some_and(|e| e == "bak")
+        })
+        .collect();
+    found.sort();
+    assert_eq!(found, vec!["vault.obscura.bak".to_owned()]);
 
     std::fs::remove_dir_all(&dir).ok();
 }

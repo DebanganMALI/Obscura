@@ -1,4 +1,8 @@
-use std::{fs, io::Write as _, path::Path};
+use std::{
+    fs,
+    io::Write as _,
+    path::{Path, PathBuf},
+};
 
 use obscura_crypto::{
     aead, derive,
@@ -43,6 +47,16 @@ fn restrict(path: &Path) -> Result<(), VaultError> {
 #[cfg(not(unix))]
 fn restrict(_path: &Path) -> Result<(), VaultError> {
     Ok(())
+}
+
+#[must_use]
+pub fn backup_path(vault: &Path) -> PathBuf {
+    vault.with_extension("obscura.bak")
+}
+
+#[must_use]
+pub fn temp_path(vault: &Path) -> PathBuf {
+    vault.with_extension("obscura.tmp")
 }
 
 pub struct Vault {
@@ -191,7 +205,7 @@ impl Vault {
     pub fn save(&mut self, path: &Path) -> Result<(), VaultError> {
         let bytes = self.to_bytes()?;
 
-        let temp = path.with_extension("obscura.tmp");
+        let temp = temp_path(path);
         {
             let mut options = fs::OpenOptions::new();
             options.write(true).create(true).truncate(true);
@@ -210,7 +224,7 @@ impl Vault {
         }
 
         if path.exists() {
-            let backup = path.with_extension("obscura.bak");
+            let backup = backup_path(path);
             fs::copy(path, &backup)
                 .map_err(|e| VaultError::Io(format!("cannot write backup: {e}")))?;
             restrict(&backup)?;
