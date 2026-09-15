@@ -125,7 +125,7 @@ pub fn default_path(app: tauri::AppHandle) -> Result<String, String> {
     Ok(default_vault_path(&app)?.display().to_string())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn calibrate(target_ms: u32) -> Result<serde_json::Value, String> {
     let params = kdf::calibrate(target_ms.clamp(200, 3000));
     Ok(serde_json::json!({
@@ -135,7 +135,7 @@ pub fn calibrate(target_ms: u32) -> Result<serde_json::Value, String> {
     }))
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn create_vault(
     app: tauri::AppHandle,
     state: State<'_, AppState>,
@@ -175,7 +175,7 @@ pub fn create_vault(
     Ok(summary)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn unlock(
     app: tauri::AppHandle,
     state: State<'_, AppState>,
@@ -409,7 +409,7 @@ pub fn generate(
     })
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn change_master_password(
     app: tauri::AppHandle,
     state: State<'_, AppState>,
@@ -503,7 +503,7 @@ pub fn forget_location(app: tauri::AppHandle) -> Result<(), String> {
     location::forget(&app)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn pick_new_location(app: tauri::AppHandle) -> Result<Option<String>, String> {
     let start = default_vault_path(&app)?;
     let chosen = app
@@ -519,7 +519,7 @@ pub fn pick_new_location(app: tauri::AppHandle) -> Result<Option<String>, String
         .map(|p| p.display().to_string()))
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn pick_existing_vault(app: tauri::AppHandle) -> Result<Option<String>, String> {
     let start = resolve(&app, None)?;
     let chosen = app
@@ -534,7 +534,7 @@ pub fn pick_existing_vault(app: tauri::AppHandle) -> Result<Option<String>, Stri
         .map(|p| p.display().to_string()))
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn relocate_vault(
     app: tauri::AppHandle,
     state: State<'_, AppState>,
@@ -610,7 +610,7 @@ pub fn create_recovery_code(
     })
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn confirm_recovery_code(
     app: tauri::AppHandle,
     state: State<'_, AppState>,
@@ -643,7 +643,7 @@ pub fn discard_recovery_code(state: State<'_, AppState>, id: Uuid) -> Result<Vau
     })
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn unlock_with_recovery(
     app: tauri::AppHandle,
     state: State<'_, AppState>,
