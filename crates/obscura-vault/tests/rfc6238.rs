@@ -30,3 +30,37 @@ fn rfc6238_appendix_b() {
         assert_eq!(c.code_at(t).unwrap(), want512, "SHA512 at t={t}");
     }
 }
+
+#[test]
+fn every_accepted_digit_count_produces_a_code_of_that_length() {
+    for digits in 6..=10u8 {
+        let totp = Totp::new(SEED1.to_vec(), TotpAlgorithm::Sha1, digits, 30).unwrap();
+        let code = totp.code_at(59).unwrap();
+        assert_eq!(
+            code.len(),
+            digits as usize,
+            "digits={digits} produced {code:?}"
+        );
+        assert!(code.chars().all(|c| c.is_ascii_digit()));
+    }
+}
+
+#[test]
+fn ten_digits_does_not_overflow_the_modulus() {
+    let totp = Totp::new(SEED1.to_vec(), TotpAlgorithm::Sha1, 10, 30).unwrap();
+    assert_eq!(
+        totp.code_at(59).unwrap(),
+        "1094287082",
+        "10^10 does not fit in u32, and with overflow-checks and panic=abort a release \
+         build aborted the whole process on any otpauth URI carrying digits=10"
+    );
+}
+
+#[test]
+fn a_ten_digit_uri_round_trips_instead_of_aborting() {
+    let uri = "otpauth://totp/Example:me?secret=GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ\
+               &algorithm=SHA1&digits=10&period=30";
+    let totp = Totp::from_uri(uri).unwrap();
+    assert_eq!(totp.digits(), 10);
+    assert_eq!(totp.code_at(59).unwrap().len(), 10);
+}

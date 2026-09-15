@@ -248,8 +248,12 @@ fn truncate(digest: &[u8], digits: u8) -> String {
     let binary =
         (u32::from(b0 & 0x7f) << 24) | (u32::from(b1) << 16) | (u32::from(b2) << 8) | u32::from(b3);
 
-    let modulus = 10u32.pow(u32::from(digits));
-    format!("{:0width$}", binary % modulus, width = digits as usize)
+    let modulus = 10u64.pow(u32::from(digits));
+    format!(
+        "{:0width$}",
+        u64::from(binary) % modulus,
+        width = digits as usize
+    )
 }
 
 const BASE32_ALPHABET: &[u8; 32] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
