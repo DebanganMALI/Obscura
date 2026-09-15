@@ -354,6 +354,21 @@ button { cursor: pointer; background: none; border: none; }
 
 .hint { color: var(--text-faint); font-size: 12px; margin-top: 8px; }
 
+.probe {
+  margin-top: 14px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface-2);
+  color: var(--text-dim);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+
 .meter { display: flex; gap: 4px; margin-top: 9px; }
 .meter__seg {
   height: 3px; flex: 1;
@@ -773,7 +788,7 @@ button { cursor: pointer; background: none; border: none; }
 .center { justify-content: center; }
 .lede { margin-bottom: 20px; }
 .tick { color: var(--accent); }
-.row-inline { display: flex; gap: 8px; }
+.row-inline { display: flex; flex-wrap: wrap; gap: 8px; }
 .row-inline .input { flex: 1; min-width: 0; }
 .field--check { display: flex; align-items: flex-end; padding-bottom: 10px; }
 .mt-20 { margin-top: 20px; }

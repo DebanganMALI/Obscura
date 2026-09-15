@@ -11,5 +11,14 @@ authors.workspace      = true
 workspace = true
 
 [dependencies]
-thiserror = { workspace = true }
-zeroize   = { workspace = true }
+obscura-crypto = { workspace = true }
+thiserror      = { workspace = true }
+zeroize        = { workspace = true }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+windows = { workspace = true, features = [
+    "Foundation",
+    "Security_Credentials",
+    "Security_Cryptography",
+    "Storage_Streams",
+] }
