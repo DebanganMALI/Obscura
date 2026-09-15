@@ -1,4 +1,312 @@
 <!doctype html>
+<html lang="en">
+<head>
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Obscura</title>
-<p>Obscura backend is running. The interface arrives in Phase 3b.</p>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<svg class="sprite" aria-hidden="true">
+  <symbol id="i-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+    <circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>
+  </symbol>
+  <symbol id="i-copy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/>
+  </symbol>
+  <symbol id="i-eye" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+    <path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12Z"/><circle cx="12" cy="12" r="2.6"/>
+  </symbol>
+  <symbol id="i-edit" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M4 20h4L19 9a2.5 2.5 0 0 0-3.5-3.5L4 16.5V20Z"/>
+  </symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+    <path d="M4 7h16M9 7V5h6v2M7 7l1 13h8l1-13"/>
+  </symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+    <path d="M12 5v14M5 12h14"/>
+  </symbol>
+  <symbol id="i-lock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+    <rect x="4" y="10" width="16" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/>
+  </symbol>
+  <symbol id="i-dice" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <rect x="4" y="4" width="16" height="16" rx="3"/><circle cx="9" cy="9" r="1.2" fill="currentColor"/><circle cx="15" cy="15" r="1.2" fill="currentColor"/><circle cx="15" cy="9" r="1.2" fill="currentColor"/><circle cx="9" cy="15" r="1.2" fill="currentColor"/>
+  </symbol>
+  <symbol id="i-cog" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M19.1 4.9 17 7M7 17l-2.1 2.1"/>
+  </symbol>
+  <symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+    <path d="m5 13 4 4 10-11"/>
+  </symbol>
+  <symbol id="i-star" viewBox="0 0 24 24" fill="currentColor">
+    <path d="m12 3.6 2.5 5.3 5.6.7-4.1 3.9 1.1 5.6-5.1-2.8-5.1 2.8 1.1-5.6L3.9 9.6l5.6-.7L12 3.6Z"/>
+  </symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+    <circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 1.8"/>
+  </symbol>
+</svg>
+
+<main id="gate" class="gate">
+  <div class="gate__glow"></div>
+  <div class="grain"></div>
+
+  <div class="gate__body">
+  <section class="gate__inner">
+    <p class="eyebrow center">
+      <span class="dot"></span><span id="gate-eyebrow">Vault locked</span>
+    </p>
+
+    <h1 class="wordmark">Obscura<span class="tick">.</span></h1>
+    <p class="serif-it" id="gate-tagline">Everything you keep, kept to yourself.</p>
+
+    <form class="gate__form" id="gate-form" autocomplete="off">
+      <div class="gate__creds" id="gate-creds">
+        <div class="field" id="gate-password-field">
+          <label class="field__label" for="gate-password" id="gate-label">Master password</label>
+          <input class="input input--mono" type="password" id="gate-password"
+                 placeholder="................" autocomplete="off" spellcheck="false">
+          <div class="meter" id="gate-meter" hidden>
+            <div class="meter__seg"></div><div class="meter__seg"></div>
+            <div class="meter__seg"></div><div class="meter__seg"></div>
+          </div>
+        </div>
+
+        <div class="field" id="gate-confirm-field" hidden>
+          <label class="field__label" for="gate-confirm">Confirm</label>
+          <input class="input input--mono" type="password" id="gate-confirm"
+                 placeholder="................" autocomplete="off" spellcheck="false">
+        </div>
+      </div>
+
+      <div class="loc">
+        <div class="loc__head">
+          <span class="loc__label">Vault location</span>
+          <span class="loc__actions">
+            <button class="loc__btn" type="button" id="loc-default" hidden>Use default</button>
+            <button class="loc__btn" type="button" id="loc-change">Browse</button>
+          </span>
+        </div>
+        <p class="loc__path mono" id="loc-path"></p>
+        <p class="loc__note" id="loc-note"></p>
+        <button class="loc__alt" type="button" id="loc-alt"></button>
+        <label class="check"><input type="checkbox" id="loc-remember" checked>
+          Remember this location</label>
+      </div>
+
+      <div class="gate__go">
+        <p class="error" id="gate-error"></p>
+        <button class="btn btn--primary btn--block" type="submit" id="gate-submit">Unlock</button>
+      </div>
+    </form>
+  </section>
+  </div>
+
+  <footer class="gate__foot">
+    <span>Argon2id &middot; XChaCha20-Poly1305</span>
+    <span>Hybrid X25519 + ML-KEM-768</span>
+  </footer>
+</main>
+
+<div id="app" hidden>
+
+  <header class="topbar">
+    <span class="brand">Obscura<span class="tick">.</span></span>
+    <span class="topbar__path" id="vault-path"></span>
+    <span class="topbar__spacer"></span>
+
+    <div class="search">
+      <svg><use href="#i-search"/></svg>
+      <input type="search" id="search" placeholder="Search vault" spellcheck="false" autocomplete="off">
+    </div>
+
+    <button class="icon-btn" id="btn-generator" title="Password generator (Ctrl+G)">
+      <svg><use href="#i-dice"/></svg>
+    </button>
+    <button class="icon-btn" id="btn-settings" title="Settings">
+      <svg><use href="#i-cog"/></svg>
+    </button>
+    <button class="icon-btn" id="btn-lock" title="Lock now (Ctrl+L)">
+      <svg><use href="#i-lock"/></svg>
+    </button>
+  </header>
+
+  <div class="layout">
+    <aside class="list-pane">
+      <div class="list-pane__head">
+        <p class="eyebrow eyebrow--dim"><span id="entry-count">0 entries</span></p>
+        <button class="icon-btn" id="btn-new" title="New entry (Ctrl+N)">
+          <svg><use href="#i-plus"/></svg>
+        </button>
+      </div>
+      <div class="list" id="list"></div>
+    </aside>
+
+    <section class="detail" id="detail"></section>
+  </div>
+</div>
+
+<div class="scrim" id="editor-scrim" hidden>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="editor-title">
+    <h2 class="modal__title" id="editor-title">New entry</h2>
+    <p class="serif-it lede">Stored encrypted under its own key.</p>
+
+    <form id="editor-form" autocomplete="off">
+      <div class="grid-2">
+        <div class="field">
+          <label class="field__label" for="e-title">Title</label>
+          <input class="input" id="e-title" required spellcheck="false">
+        </div>
+        <div class="field">
+          <label class="field__label" for="e-username">Username</label>
+          <input class="input" id="e-username" spellcheck="false" autocomplete="off">
+        </div>
+      </div>
+
+      <div class="field">
+        <label class="field__label" for="e-password">Password</label>
+        <div class="row-inline">
+          <input class="input input--mono" type="password" id="e-password"
+                 autocomplete="new-password" spellcheck="false">
+          <button class="btn btn--ghost" type="button" id="e-generate">Generate</button>
+        </div>
+        <p class="hint" id="e-password-hint"></p>
+      </div>
+
+      <div class="field">
+        <label class="field__label" for="e-url">Website</label>
+        <input class="input" id="e-url" placeholder="https://" spellcheck="false">
+      </div>
+
+      <div class="field">
+        <label class="field__label" for="e-totp">Two-factor URI</label>
+        <input class="input input--mono" id="e-totp" placeholder="otpauth://totp/..." spellcheck="false">
+      </div>
+
+      <div class="field">
+        <label class="field__label" for="e-notes">Notes</label>
+        <textarea class="textarea" id="e-notes" spellcheck="false"></textarea>
+      </div>
+
+      <div class="grid-2">
+        <div class="field">
+          <label class="field__label" for="e-tags">Tags</label>
+          <input class="input" id="e-tags" placeholder="work, personal" spellcheck="false">
+        </div>
+        <div class="field field--check">
+          <label class="check"><input type="checkbox" id="e-favorite"> Pin to top</label>
+        </div>
+      </div>
+
+      <p class="error" id="editor-error"></p>
+
+      <div class="modal__foot">
+        <button class="btn btn--ghost" type="button" data-close="editor-scrim">Cancel</button>
+        <button class="btn btn--primary" type="submit">Save entry</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="scrim" id="gen-scrim" hidden>
+  <div class="modal modal--narrow" role="dialog" aria-modal="true" aria-labelledby="gen-title">
+    <h2 class="modal__title" id="gen-title">Generate</h2>
+    <p class="serif-it lede">Drawn uniformly, never modulo-biased.</p>
+
+    <div class="gen__out mono" id="gen-out">&nbsp;</div>
+    <p class="gen__bits">Entropy <b id="gen-bits">0</b> bits</p>
+
+    <div class="field mt-20">
+      <label class="field__label" for="gen-length">Length <span id="gen-length-val">20</span></label>
+      <input class="slider" type="range" id="gen-length" min="8" max="64" value="20">
+    </div>
+
+    <label class="check"><input type="checkbox" id="gen-lower" checked> Lowercase a-z</label>
+    <label class="check"><input type="checkbox" id="gen-upper" checked> Uppercase A-Z</label>
+    <label class="check"><input type="checkbox" id="gen-digits" checked> Digits 0-9</label>
+    <label class="check"><input type="checkbox" id="gen-symbols" checked> Symbols</label>
+    <label class="check"><input type="checkbox" id="gen-ambiguous"> Exclude look-alikes <code>0O1lI|</code></label>
+    <label class="check"><input type="checkbox" id="gen-each" checked> Require every class</label>
+
+    <div class="modal__foot">
+      <button class="btn btn--ghost" type="button" data-close="gen-scrim">Close</button>
+      <button class="btn btn--ghost" type="button" id="gen-again">Regenerate</button>
+      <button class="btn btn--primary" type="button" id="gen-copy">Copy</button>
+    </div>
+  </div>
+</div>
+
+<div class="scrim" id="settings-scrim" hidden>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="settings-title">
+    <h2 class="modal__title" id="settings-title">Settings</h2>
+    <p class="serif-it lede">This vault, on this machine.</p>
+
+    <p class="section__label">Vault</p>
+    <div class="card">
+      <div class="kv"><span class="kv__k">Location</span><span class="kv__v mono" id="s-path"></span></div>
+      <div class="kv"><span class="kv__k">Entries</span><span class="kv__v" id="s-count"></span></div>
+      <div class="kv"><span class="kv__k">Revision</span><span class="kv__v mono" id="s-revision"></span></div>
+      <div class="kv"><span class="kv__k">Unlock methods</span><span class="kv__v" id="s-slots"></span></div>
+      <div class="kv"><span class="kv__k">Remembered</span><span class="kv__v" id="s-remembered"></span></div>
+    </div>
+
+    <div class="section">
+      <p class="section__label">Location</p>
+      <div class="card">
+        <p class="hint m-0">The vault can live anywhere you can write - another disk, a
+          removable drive, or a folder inside a mounted encrypted volume. Moving it
+          writes the vault to the new place, checks it landed intact, and only then
+          deletes the old copy.</p>
+        <div class="row-inline mt-20">
+          <button class="btn btn--ghost" type="button" id="s-move">Move vault</button>
+          <button class="btn btn--ghost" type="button" id="s-forget">Forget location</button>
+        </div>
+        <p class="error" id="s-loc-error"></p>
+      </div>
+    </div>
+
+    <div class="section">
+      <p class="section__label">Auto-lock</p>
+      <div class="card">
+        <div class="field m-0">
+          <label class="field__label" for="s-autolock">
+            Lock after <span id="s-autolock-val">5</span> minutes idle
+          </label>
+          <input class="slider" type="range" id="s-autolock" min="1" max="60" value="5">
+          <p class="hint">The countdown runs in Rust, not in this window, so a
+            frozen interface cannot keep the vault open.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="section">
+      <p class="section__label">Master password</p>
+      <div class="card">
+        <div class="field">
+          <label class="field__label" for="s-current">Current password</label>
+          <input class="input input--mono" type="password" id="s-current" autocomplete="off">
+        </div>
+        <div class="field">
+          <label class="field__label" for="s-new">New password</label>
+          <input class="input input--mono" type="password" id="s-new" autocomplete="new-password">
+          <div class="meter" id="s-meter">
+            <div class="meter__seg"></div><div class="meter__seg"></div>
+            <div class="meter__seg"></div><div class="meter__seg"></div>
+          </div>
+        </div>
+        <p class="error" id="s-error"></p>
+        <button class="btn btn--ghost" type="button" id="s-change">Change password</button>
+      </div>
+    </div>
+
+    <div class="modal__foot">
+      <button class="btn btn--ghost" type="button" data-close="settings-scrim">Close</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"><svg><use href="#i-check"/></svg><span id="toast-text"></span></div>
+
+<script src="app.js"></script>
+</body>
+</html>

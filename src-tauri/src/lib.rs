@@ -3,6 +3,7 @@
 mod clipboard;
 mod commands;
 mod dto;
+mod location;
 mod state;
 
 use std::{thread, time::Duration};
@@ -16,10 +17,17 @@ pub const LOCKED_EVENT: &str = "obscura://locked";
 #[allow(clippy::expect_used)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .manage(AppState::default())
         .invoke_handler(tauri::generate_handler![
             commands::vault_exists,
             commands::default_path,
+            commands::probe_location,
+            commands::remembered_location,
+            commands::forget_location,
+            commands::pick_new_location,
+            commands::pick_existing_vault,
+            commands::relocate_vault,
             commands::calibrate,
             commands::create_vault,
             commands::unlock,

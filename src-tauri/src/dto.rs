@@ -99,3 +99,26 @@ pub struct TotpCode {
     pub remaining: u64,
     pub period: u64,
 }
+
+#[allow(clippy::struct_excessive_bools)]
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LocationProbe {
+    pub path: String,
+    pub parent: String,
+    pub exists: bool,
+    pub is_vault: bool,
+    pub parent_exists: bool,
+    pub writable: bool,
+    pub remembered: bool,
+    pub is_default: bool,
+    pub warning: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RelocateResult {
+    pub info: VaultInfo,
+    pub previous: String,
+    pub previous_removed: bool,
+}

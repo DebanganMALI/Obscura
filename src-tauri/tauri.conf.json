@@ -7,13 +7,14 @@
     "frontendDist": "../ui"
   },
   "app": {
+    "withGlobalTauri": true,
     "windows": [
       {
         "title": "Obscura",
         "width": 1120,
         "height": 740,
         "minWidth": 860,
-        "minHeight": 560,
+        "minHeight": 640,
         "resizable": true,
         "center": true
       }

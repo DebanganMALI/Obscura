@@ -9,15 +9,17 @@ use obscura_vault::{
     Credential, Entry, SecretString, Totp, Vault,
 };
 use tauri::{Manager, State};
+use tauri_plugin_dialog::DialogExt;
 use uuid::Uuid;
 use zeroize::Zeroizing;
 
 use crate::{
     clipboard,
     dto::{
-        CustomFieldView, EntryDetail, EntryInput, EntrySummary, GeneratedPassword, SlotView,
-        TotpCode, VaultInfo,
+        CustomFieldView, EntryDetail, EntryInput, EntrySummary, GeneratedPassword, LocationProbe,
+        RelocateResult, SlotView, TotpCode, VaultInfo,
     },
+    location,
     state::{AppState, Session},
 };
 
@@ -32,9 +34,19 @@ fn default_vault_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
 
 fn resolve(app: &tauri::AppHandle, path: Option<String>) -> Result<PathBuf, String> {
     if let Some(chosen) = path.filter(|p| !p.trim().is_empty()) {
-        Ok(PathBuf::from(chosen))
+        return Ok(PathBuf::from(chosen.trim()));
+    }
+    if let Some(remembered) = location::remembered(app) {
+        return Ok(remembered);
+    }
+    default_vault_path(app)
+}
+
+fn apply_remember(app: &tauri::AppHandle, path: &std::path::Path, remember: Option<bool>) {
+    if remember.unwrap_or(true) {
+        let _ = location::remember(app, path);
     } else {
-        default_vault_path(app)
+        let _ = location::forget(app);
     }
 }
 
@@ -85,6 +97,7 @@ pub fn create_vault(
     path: Option<String>,
     password: String,
     calibrate_ms: Option<u32>,
+    remember: Option<bool>,
 ) -> Result<VaultInfo, String> {
     let password = Zeroizing::new(password);
     let target = resolve(&app, path)?;
@@ -92,12 +105,23 @@ pub fn create_vault(
     if target.exists() {
         return Err("a vault already exists at that location".to_owned());
     }
+    match target.parent() {
+        Some(parent) if parent.is_dir() => {}
+        Some(parent) => {
+            return Err(format!(
+                "the folder {} does not exist - if the vault lives on an encrypted volume or a removable disk, mount it first",
+                parent.display()
+            ))
+        }
+        None => return Err("that is not a valid file path".to_owned()),
+    }
 
     let params =
         calibrate_ms.map_or_else(KdfParams::default, |ms| kdf::calibrate(ms.clamp(200, 3000)));
 
     let mut vault = Vault::create(password.as_bytes(), params).map_err(|e| e.to_string())?;
     vault.save(&target).map_err(|e| e.to_string())?;
+    apply_remember(&app, &target, remember);
 
     let revision = vault.revision();
     let session = Session {
@@ -117,12 +141,25 @@ pub fn unlock(
     state: State<'_, AppState>,
     path: Option<String>,
     password: String,
+    remember: Option<bool>,
 ) -> Result<VaultInfo, String> {
     let password = Zeroizing::new(password);
     let target = resolve(&app, path)?;
 
+    if !target.exists() {
+        let hint = match target.parent() {
+            Some(parent) if !parent.is_dir() => format!(
+                " - the folder {} is not there either, so the disk or encrypted volume may not be mounted",
+                parent.display()
+            ),
+            _ => String::new(),
+        };
+        return Err(format!("no vault found at {}{hint}", target.display()));
+    }
+
     let vault = Vault::open(&target, &Credential::Password(password.as_bytes()), None)
         .map_err(|_| "could not unlock the vault with that password".to_owned())?;
+    apply_remember(&app, &target, remember);
 
     let revision = vault.revision();
     let session = Session {
@@ -356,5 +393,150 @@ pub fn change_master_password(
         session.vault.save(&path).map_err(|e| e.to_string())?;
         session.min_revision = session.vault.revision();
         Ok(())
+    })
+}
+
+#[tauri::command]
+pub fn probe_location(
+    app: tauri::AppHandle,
+    path: Option<String>,
+) -> Result<LocationProbe, String> {
+    let explicit = path.as_ref().is_some_and(|p| !p.trim().is_empty());
+    let target = resolve(&app, path)?;
+    let default = default_vault_path(&app)?;
+    let remembered = !explicit && location::remembered(&app).is_some();
+
+    let exists = target.is_file();
+    let parent_exists = target.parent().is_some_and(std::path::Path::is_dir);
+    let writable = if exists {
+        true
+    } else {
+        location::parent_writable(&target)
+    };
+    let is_vault = exists && location::is_vault_file(&target);
+
+    let warning = if exists && !is_vault {
+        Some("There is a file here, but it is not an Obscura vault.".to_owned())
+    } else if !parent_exists {
+        Some(
+            "That folder is not available. If the vault lives on an encrypted volume or a removable disk, mount it first."
+                .to_owned(),
+        )
+    } else if !writable {
+        Some("Obscura cannot write to that folder.".to_owned())
+    } else if location::looks_synced(&target) {
+        Some(
+            "That folder looks like a syncing cloud drive. Sync clients can restore an older copy of a file, which for a vault means silently undoing password changes."
+                .to_owned(),
+        )
+    } else {
+        None
+    };
+
+    Ok(LocationProbe {
+        path: target.display().to_string(),
+        parent: target
+            .parent()
+            .map_or_else(String::new, |p| p.display().to_string()),
+        exists,
+        is_vault,
+        parent_exists,
+        writable,
+        remembered,
+        is_default: target == default,
+        warning,
+    })
+}
+
+#[tauri::command]
+pub fn remembered_location(app: tauri::AppHandle) -> Result<Option<String>, String> {
+    Ok(location::remembered(&app).map(|p| p.display().to_string()))
+}
+
+#[tauri::command]
+pub fn forget_location(app: tauri::AppHandle) -> Result<(), String> {
+    location::forget(&app)
+}
+
+#[tauri::command]
+pub fn pick_new_location(app: tauri::AppHandle) -> Result<Option<String>, String> {
+    let start = default_vault_path(&app)?;
+    let chosen = app
+        .dialog()
+        .file()
+        .set_title("Where should Obscura keep your vault?")
+        .add_filter("Obscura vault", &["obscura"])
+        .set_file_name("obscura.obscura")
+        .set_directory(start.parent().unwrap_or(&start))
+        .blocking_save_file();
+    Ok(chosen
+        .and_then(|file| file.into_path().ok())
+        .map(|p| p.display().to_string()))
+}
+
+#[tauri::command]
+pub fn pick_existing_vault(app: tauri::AppHandle) -> Result<Option<String>, String> {
+    let start = resolve(&app, None)?;
+    let chosen = app
+        .dialog()
+        .file()
+        .set_title("Locate your Obscura vault")
+        .add_filter("Obscura vault", &["obscura"])
+        .set_directory(start.parent().unwrap_or(&start))
+        .blocking_pick_file();
+    Ok(chosen
+        .and_then(|file| file.into_path().ok())
+        .map(|p| p.display().to_string()))
+}
+
+#[tauri::command]
+pub fn relocate_vault(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    destination: String,
+    remember: Option<bool>,
+) -> Result<RelocateResult, String> {
+    let target = PathBuf::from(destination.trim());
+    if target.as_os_str().is_empty() {
+        return Err("choose a destination first".to_owned());
+    }
+    if target.exists() {
+        return Err("something already exists at that location".to_owned());
+    }
+    match target.parent() {
+        Some(parent) if parent.is_dir() => {}
+        Some(parent) => {
+            return Err(format!(
+                "the folder {} does not exist - mount the disk or volume first",
+                parent.display()
+            ))
+        }
+        None => return Err("that is not a valid file path".to_owned()),
+    }
+
+    let secs = state.auto_lock().as_secs();
+    let (result, previous) = state.with_session(|session| {
+        let previous = session.path.clone();
+        session.vault.save(&target).map_err(|e| e.to_string())?;
+
+        if !location::is_vault_file(&target) {
+            let _ = std::fs::remove_file(&target);
+            return Err("the vault did not write correctly to that location".to_owned());
+        }
+
+        session.path.clone_from(&target);
+        session.min_revision = session.vault.revision();
+        Ok((info(session, secs), previous))
+    })?;
+
+    let previous_removed = std::fs::remove_file(&previous).is_ok();
+    let _ = std::fs::remove_file(previous.with_extension("bak"));
+
+    apply_remember(&app, &target, remember);
+
+    Ok(RelocateResult {
+        info: result,
+        previous: previous.display().to_string(),
+        previous_removed,
     })
 }
