@@ -45,6 +45,7 @@ fn restrict(path: &Path) -> Result<(), VaultError> {
 }
 
 #[cfg(not(unix))]
+#[allow(clippy::unnecessary_wraps)]
 fn restrict(_path: &Path) -> Result<(), VaultError> {
     Ok(())
 }
