@@ -53,6 +53,7 @@ mod imp {
         Storage::Streams::DataReader,
     };
 
+    #[allow(clippy::needless_pass_by_value)]
     fn win(error: windows::core::Error) -> PlatformError {
         #[allow(clippy::cast_sign_loss)]
         PlatformError::Platform(error.code().0 as u32)
@@ -169,6 +170,7 @@ mod imp {
         seed_from(&sign(&credential)?)
     }
 
+    #[allow(clippy::unnecessary_wraps)]
     pub fn forget(vault_id: &str) -> Result<(), PlatformError> {
         delete(&HSTRING::from(credential_name(vault_id)));
         Ok(())
@@ -192,6 +194,7 @@ mod imp {
         Ok(fingerprint_of(&buffer_bytes(&key)?))
     }
 
+    #[allow(clippy::unnecessary_wraps)]
     pub fn forget_by_name(name: &str) -> Result<(), PlatformError> {
         delete(&HSTRING::from(name));
         Ok(())
