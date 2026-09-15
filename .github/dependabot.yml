@@ -1,0 +1,12 @@
+version: 2
+updates:
+  - package-ecosystem: cargo
+    directory: "/"
+    schedule: { interval: weekly }
+    open-pull-requests-limit: 10
+    groups:
+      rustcrypto:
+        patterns: ["argon2", "chacha20poly1305", "hkdf", "sha2", "ml-kem", "x25519-dalek", "zeroize", "subtle"]
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule: { interval: weekly }
