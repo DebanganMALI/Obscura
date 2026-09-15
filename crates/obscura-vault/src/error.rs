@@ -42,4 +42,15 @@ pub enum VaultError {
 
     #[error("cannot remove the last unlock slot")]
     LastSlot,
+
+    #[error(
+        "cannot remove the last portable credential: keep a master password or a recovery code"
+    )]
+    LastPortableSlot,
+
+    #[error("that is not a recovery code")]
+    RecoveryCodeFormat,
+
+    #[error("that recovery code has a typo in it")]
+    RecoveryCodeChecksum,
 }
