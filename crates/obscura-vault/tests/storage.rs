@@ -1,0 +1,383 @@
+#![allow(clippy::unwrap_used, clippy::indexing_slicing, clippy::panic)]
+
+use obscura_crypto::KdfParams;
+use obscura_vault::{
+    entry::Entry,
+    format::{self, SlotKind},
+    vault::{new_recovery_identity, Credential},
+    Vault, VaultError,
+};
+
+const FAST: KdfParams = KdfParams {
+    m_cost_kib: 64 * 1024,
+    t_cost: 2,
+    p_cost: 1,
+};
+
+const PASSWORD: &[u8] = b"correct horse battery staple";
+
+fn seeded_vault() -> Vault {
+    let mut vault = Vault::create(PASSWORD, FAST).unwrap();
+
+    let mut github = Entry::new_login("GitHub", "saheb");
+    github.set_password("first-secret");
+    github.urls.push("https://github.com".to_owned());
+    vault.add(github).unwrap();
+
+    let mut bank = Entry::new_login("Bank", "saheb@example.com");
+    bank.set_password("second-secret");
+    vault.add(bank).unwrap();
+
+    vault
+}
+
+fn scratch_dir() -> std::path::PathBuf {
+    let dir = std::env::temp_dir().join(format!("obscura-test-{}", uuid::Uuid::new_v4()));
+    std::fs::create_dir_all(&dir).unwrap();
+    dir
+}
+
+#[test]
+fn a_vault_round_trips_through_bytes() {
+    let mut vault = seeded_vault();
+    let bytes = vault.to_bytes().unwrap();
+
+    let reopened = Vault::from_bytes(&bytes, &Credential::Password(PASSWORD), None).unwrap();
+
+    assert_eq!(reopened.len(), 2);
+    assert_eq!(reopened.id(), vault.id());
+
+    let github = reopened
+        .entries()
+        .iter()
+        .find(|e| e.title == "GitHub")
+        .unwrap();
+    assert_eq!(github.password.expose(), "first-secret");
+    assert_eq!(github.urls, vec!["https://github.com".to_owned()]);
+}
+
+#[test]
+fn an_empty_vault_round_trips() {
+    let mut vault = Vault::create(PASSWORD, FAST).unwrap();
+    let bytes = vault.to_bytes().unwrap();
+    let reopened = Vault::from_bytes(&bytes, &Credential::Password(PASSWORD), None).unwrap();
+    assert!(reopened.is_empty());
+}
+
+#[test]
+fn the_wrong_password_is_rejected() {
+    let mut vault = seeded_vault();
+    let bytes = vault.to_bytes().unwrap();
+
+    assert_eq!(
+        Vault::from_bytes(&bytes, &Credential::Password(b"wrong"), None).unwrap_err(),
+        VaultError::NoMatchingSlot
+    );
+}
+
+#[test]
+fn editing_the_header_breaks_decryption() {
+    let mut vault = seeded_vault();
+    let bytes = vault.to_bytes().unwrap();
+
+    for offset in [format::PREFIX_LEN, format::PREFIX_LEN + 5] {
+        let mut corrupted = bytes.clone();
+        corrupted[offset] ^= 0x01;
+        assert!(
+            Vault::from_bytes(&corrupted, &Credential::Password(PASSWORD), None).is_err(),
+            "a flipped header byte at {offset} went undetected"
+        );
+    }
+}
+
+#[test]
+fn editing_the_body_breaks_decryption() {
+    let mut vault = seeded_vault();
+    let bytes = vault.to_bytes().unwrap();
+
+    let last = bytes.len() - 1;
+    for offset in [bytes.len() - 40, last] {
+        let mut corrupted = bytes.clone();
+        corrupted[offset] ^= 0x01;
+        assert!(
+            Vault::from_bytes(&corrupted, &Credential::Password(PASSWORD), None).is_err(),
+            "a flipped body byte at {offset} went undetected"
+        );
+    }
+}
+
+#[test]
+fn a_body_cannot_be_moved_between_vaults() {
+    let mut a = seeded_vault();
+    let mut b = seeded_vault();
+
+    let bytes_a = a.to_bytes().unwrap();
+    let bytes_b = b.to_bytes().unwrap();
+
+    let (_, header_a, body_start_a) = format::decode_header(&bytes_a).unwrap();
+    let (_, _, body_start_b) = format::decode_header(&bytes_b).unwrap();
+
+    let mut frankenstein = bytes_a[..body_start_a].to_vec();
+    frankenstein.extend_from_slice(&bytes_b[body_start_b..]);
+    assert_eq!(header_a.len() + format::PREFIX_LEN, body_start_a);
+
+    assert!(Vault::from_bytes(&frankenstein, &Credential::Password(PASSWORD), None).is_err());
+}
+
+#[test]
+fn a_file_that_is_not_a_vault_is_rejected() {
+    assert_eq!(
+        Vault::from_bytes(b"hello world", &Credential::Password(PASSWORD), None).unwrap_err(),
+        VaultError::BadMagic
+    );
+    assert!(Vault::from_bytes(&[], &Credential::Password(PASSWORD), None).is_err());
+}
+
+#[test]
+fn a_future_format_version_is_refused_rather_than_guessed() {
+    let mut vault = seeded_vault();
+    let mut bytes = vault.to_bytes().unwrap();
+    bytes[8] = 99;
+
+    assert_eq!(
+        Vault::from_bytes(&bytes, &Credential::Password(PASSWORD), None).unwrap_err(),
+        VaultError::UnsupportedVersion(99)
+    );
+}
+
+#[test]
+fn a_truncated_file_is_rejected() {
+    let mut vault = seeded_vault();
+    let bytes = vault.to_bytes().unwrap();
+
+    for cut in [10, 14, 20, bytes.len() / 2] {
+        assert!(
+            Vault::from_bytes(&bytes[..cut], &Credential::Password(PASSWORD), None).is_err(),
+            "a file truncated to {cut} bytes was accepted"
+        );
+    }
+}
+
+#[test]
+fn saving_advances_the_revision() {
+    let mut vault = seeded_vault();
+    assert_eq!(vault.revision(), 1);
+
+    vault.to_bytes().unwrap();
+    assert_eq!(vault.revision(), 2);
+
+    vault.to_bytes().unwrap();
+    assert_eq!(vault.revision(), 3);
+}
+
+#[test]
+fn an_older_file_is_refused_when_the_caller_knows_better() {
+    let mut vault = seeded_vault();
+    let old = vault.to_bytes().unwrap();
+    vault.to_bytes().unwrap();
+
+    assert_eq!(
+        Vault::from_bytes(&old, &Credential::Password(PASSWORD), Some(3)).unwrap_err(),
+        VaultError::Rollback {
+            found: 2,
+            expected: 3,
+        }
+    );
+
+    assert!(Vault::from_bytes(&old, &Credential::Password(PASSWORD), Some(2)).is_ok());
+}
+
+#[test]
+fn a_recovery_identity_opens_the_same_vault() {
+    let mut vault = seeded_vault();
+    let identity = new_recovery_identity().unwrap();
+    vault
+        .add_identity_slot(SlotKind::Recovery, "Printed recovery code", &identity)
+        .unwrap();
+
+    let bytes = vault.to_bytes().unwrap();
+    let recovered = Vault::from_bytes(&bytes, &Credential::Identity(&identity), None).unwrap();
+
+    assert_eq!(recovered.len(), 2);
+    assert_eq!(recovered.slots().len(), 2);
+}
+
+#[test]
+fn a_different_identity_cannot_open_a_recovery_slot() {
+    let mut vault = seeded_vault();
+    let real = new_recovery_identity().unwrap();
+    let impostor = new_recovery_identity().unwrap();
+    vault
+        .add_identity_slot(SlotKind::Recovery, "recovery", &real)
+        .unwrap();
+
+    let bytes = vault.to_bytes().unwrap();
+    assert_eq!(
+        Vault::from_bytes(&bytes, &Credential::Identity(&impostor), None).unwrap_err(),
+        VaultError::NoMatchingSlot
+    );
+}
+
+#[test]
+fn the_last_slot_cannot_be_removed() {
+    let mut vault = seeded_vault();
+    let only = vault.slots()[0].id;
+
+    assert_eq!(vault.remove_slot(only).unwrap_err(), VaultError::LastSlot);
+}
+
+#[test]
+fn removing_a_slot_revokes_exactly_that_credential() {
+    let mut vault = seeded_vault();
+    let identity = new_recovery_identity().unwrap();
+    let slot = vault
+        .add_identity_slot(SlotKind::Recovery, "recovery", &identity)
+        .unwrap();
+
+    vault.remove_slot(slot).unwrap();
+    let bytes = vault.to_bytes().unwrap();
+
+    assert!(Vault::from_bytes(&bytes, &Credential::Identity(&identity), None).is_err());
+    assert!(Vault::from_bytes(&bytes, &Credential::Password(PASSWORD), None).is_ok());
+}
+
+#[test]
+fn changing_the_password_keeps_the_entries() {
+    let mut vault = seeded_vault();
+    vault
+        .change_password(b"a brand new passphrase", None)
+        .unwrap();
+
+    let bytes = vault.to_bytes().unwrap();
+
+    assert!(Vault::from_bytes(&bytes, &Credential::Password(PASSWORD), None).is_err());
+
+    let reopened = Vault::from_bytes(
+        &bytes,
+        &Credential::Password(b"a brand new passphrase"),
+        None,
+    )
+    .unwrap();
+    assert_eq!(reopened.len(), 2);
+    assert_eq!(
+        reopened
+            .entries()
+            .iter()
+            .find(|e| e.title == "GitHub")
+            .unwrap()
+            .password
+            .expose(),
+        "first-secret"
+    );
+}
+
+#[test]
+fn changing_the_password_leaves_other_slots_working() {
+    let mut vault = seeded_vault();
+    let identity = new_recovery_identity().unwrap();
+    vault
+        .add_identity_slot(SlotKind::Recovery, "recovery", &identity)
+        .unwrap();
+
+    vault.change_password(b"rotated", None).unwrap();
+    let bytes = vault.to_bytes().unwrap();
+
+    assert!(Vault::from_bytes(&bytes, &Credential::Identity(&identity), None).is_ok());
+    assert!(Vault::from_bytes(&bytes, &Credential::Password(b"rotated"), None).is_ok());
+}
+
+#[test]
+fn weak_kdf_parameters_are_refused_on_change() {
+    let mut vault = seeded_vault();
+    let weak = KdfParams {
+        m_cost_kib: 1024,
+        t_cost: 1,
+        p_cost: 1,
+    };
+    assert!(vault.change_password(b"whatever", Some(weak)).is_err());
+}
+
+#[test]
+fn entries_can_be_added_removed_and_searched() {
+    let mut vault = seeded_vault();
+    let id = vault.entries()[0].id;
+
+    assert_eq!(vault.search("github").len(), 1);
+    assert_eq!(vault.search("").len(), 2);
+    assert!(vault.get(id).is_some());
+
+    vault.remove(id).unwrap();
+    assert_eq!(vault.len(), 1);
+    assert!(vault.get(id).is_none());
+    assert!(vault.remove(id).is_err());
+}
+
+#[test]
+fn edits_survive_a_round_trip() {
+    let mut vault = seeded_vault();
+    let id = vault.entries()[0].id;
+
+    vault.get_mut(id).unwrap().set_password("rotated-secret");
+    let bytes = vault.to_bytes().unwrap();
+
+    let reopened = Vault::from_bytes(&bytes, &Credential::Password(PASSWORD), None).unwrap();
+    assert_eq!(
+        reopened.get(id).unwrap().password.expose(),
+        "rotated-secret"
+    );
+}
+
+#[test]
+fn every_entry_gets_its_own_key() {
+    let mut vault = Vault::create(PASSWORD, FAST).unwrap();
+    let mut a = Entry::new_login("Same", "same");
+    a.set_password("identical");
+    let mut b = Entry::new_login("Same", "same");
+    b.set_password("identical");
+    vault.add(a).unwrap();
+    vault.add(b).unwrap();
+
+    let bytes = vault.to_bytes().unwrap();
+    let (_, _, body_start) = format::decode_header(&bytes).unwrap();
+    let body = &bytes[body_start..];
+
+    let midpoint = body.len() / 2;
+    assert_ne!(body[..midpoint], body[midpoint..midpoint * 2]);
+}
+
+#[test]
+fn saving_writes_atomically_and_keeps_a_backup() {
+    let dir = scratch_dir();
+    let path = dir.join("test.obscura");
+
+    let mut vault = seeded_vault();
+    vault.save(&path).unwrap();
+    assert!(path.exists());
+    assert!(
+        !dir.join("test.obscura.tmp").exists(),
+        "temp file left behind"
+    );
+
+    let first = std::fs::read(&path).unwrap();
+
+    vault.add(Entry::new_login("Third", "third")).unwrap();
+    vault.save(&path).unwrap();
+
+    let backup = dir.join("test.obscura.bak");
+    assert!(backup.exists(), "no backup written");
+    assert_eq!(std::fs::read(&backup).unwrap(), first);
+
+    let reopened = Vault::open(&path, &Credential::Password(PASSWORD), None).unwrap();
+    assert_eq!(reopened.len(), 3);
+
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn opening_a_missing_file_reports_io_rather_than_panicking() {
+    let path = std::env::temp_dir().join("obscura-does-not-exist.obscura");
+    assert!(matches!(
+        Vault::open(&path, &Credential::Password(PASSWORD), None),
+        Err(VaultError::Io(_))
+    ));
+}
