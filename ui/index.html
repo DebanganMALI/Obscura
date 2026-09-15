@@ -323,6 +323,39 @@
   </div>
 </div>
 
+<div class="scrim" id="rb-scrim" data-locked="true" hidden>
+  <div class="modal modal--narrow" role="dialog" aria-modal="true" aria-labelledby="rb-title">
+    <h2 class="modal__title" id="rb-title">This vault looks older than it should</h2>
+    <p class="serif-it lede" id="rb-lede"></p>
+
+    <div class="rb__figures">
+      <div class="rb__figure">
+        <span class="rb__label">File on disk</span>
+        <span class="rb__value mono" id="rb-found">-</span>
+      </div>
+      <div class="rb__figure" id="rb-expected-box">
+        <span class="rb__label">Last seen here</span>
+        <span class="rb__value mono" id="rb-expected">-</span>
+      </div>
+    </div>
+
+    <p class="rc__why" id="rb-why"></p>
+
+    <div class="field mt-20">
+      <label class="field__label" for="rb-typed">Type the file's revision number to continue</label>
+      <input class="input input--mono" id="rb-typed" inputmode="numeric"
+             autocomplete="off" spellcheck="false" placeholder="0">
+    </div>
+
+    <p class="error" id="rb-error"></p>
+
+    <div class="modal__foot">
+      <button class="btn btn--ghost" type="button" id="rb-cancel">Cancel</button>
+      <button class="btn btn--primary" type="button" id="rb-accept">Open anyway</button>
+    </div>
+  </div>
+</div>
+
 <div class="scrim" id="rc-scrim" data-locked="true" hidden>
   <div class="modal modal--narrow" role="dialog" aria-modal="true" aria-labelledby="rc-title">
     <h2 class="modal__title" id="rc-title">Recovery code</h2>

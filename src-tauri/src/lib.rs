@@ -5,6 +5,7 @@ mod commands;
 mod dto;
 mod location;
 mod state;
+mod watermark;
 
 use std::{thread, time::Duration};
 
