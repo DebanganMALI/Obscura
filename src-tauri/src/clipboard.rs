@@ -12,11 +12,7 @@ pub const MAX_CLEAR_DELAY: u64 = 120;
 
 #[cfg(target_os = "windows")]
 fn place(clipboard: &mut arboard::Clipboard, value: &str) -> Result<(), arboard::Error> {
-    clipboard
-        .set()
-        .exclude_from_history()
-        .exclude_from_cloud()
-        .text(value)
+    clipboard.set().exclude_from_monitoring().text(value)
 }
 
 #[cfg(target_os = "linux")]
