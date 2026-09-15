@@ -83,6 +83,8 @@ pub struct SlotView {
     pub id: Uuid,
     pub kind: String,
     pub label: String,
+    pub created_at: String,
+    pub portable: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -121,4 +123,11 @@ pub struct RelocateResult {
     pub info: VaultInfo,
     pub previous: String,
     pub previous_removed: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct IssuedRecoveryCode {
+    pub slot: Uuid,
+    pub code: String,
 }

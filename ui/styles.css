@@ -337,6 +337,12 @@ button { cursor: pointer; background: none; border: none; }
   transition: background .15s, color .15s;
 }
 .icon-btn:hover { background: var(--surface-3); color: var(--text); }
+.icon-btn--off, .icon-btn:disabled {
+  opacity: .3;
+  cursor: not-allowed;
+  pointer-events: auto;
+}
+.icon-btn--off:hover, .icon-btn:disabled:hover { background: none; color: var(--text-dim); }
 .icon-btn svg { width: 16px; height: 16px; }
 
 .error {
@@ -684,6 +690,62 @@ button { cursor: pointer; background: none; border: none; }
   width: 14px; height: 14px; border-radius: 50%;
   background: var(--accent); border: 2px solid var(--bg);
 }
+
+.rc__code {
+  background: var(--bg-deep);
+  border: 1px solid var(--warn);
+  border-radius: var(--r);
+  padding: 15px 12px;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px 14px;
+  user-select: text;
+}
+
+.rc__group {
+  font-size: 15.5px;
+  letter-spacing: 0.14em;
+  color: var(--text);
+  white-space: nowrap;
+}
+
+.rc__why {
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--warn);
+  margin-top: 14px;
+}
+
+.slot {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 0;
+  border-bottom: 1px solid var(--line-soft);
+}
+.slot:last-of-type { border-bottom: none; }
+
+.slot__body { flex: 1; min-width: 0; }
+.slot__label { font-size: 13.5px; display: block; }
+.slot__meta {
+  display: block;
+  font-size: 11px;
+  color: var(--text-faint);
+  letter-spacing: 0.06em;
+}
+
+.slot__tag {
+  font-size: 9.5px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 2px 8px;
+  color: var(--text-faint);
+  flex-shrink: 0;
+}
+.slot__tag--portable { border-color: var(--ok); color: var(--ok); }
 
 .toast {
   position: fixed;

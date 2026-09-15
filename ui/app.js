@@ -69,6 +69,7 @@ let gateMode = "unlock";
 let gatePath = null;
 let gateProbe = null;
 let gateBlocked = false;
+let gateRecoveryMode = false;
 
 async function refreshGate() {
   try {
@@ -120,12 +121,23 @@ function applyGateMode() {
     return;
   }
 
+  $("gate-use-recovery").hidden = creating;
+  if (creating) gateRecoveryMode = false;
+
   $("gate-eyebrow").textContent = creating ? "First run" : "Vault locked";
   $("gate-tagline").textContent = creating
     ? "Choose where the vault lives, then a master password."
     : "Everything you keep, kept to yourself.";
-  $("gate-label").textContent = creating ? "New master password" : "Master password";
-  $("gate-submit").textContent = creating ? "Create vault" : "Unlock";
+  $("gate-label").textContent = creating
+    ? "New master password"
+    : gateRecoveryMode
+      ? "Recovery code"
+      : "Master password";
+  $("gate-submit").textContent = creating
+    ? "Create vault"
+    : gateRecoveryMode
+      ? "Unlock with code"
+      : "Unlock";
   $("gate-submit").disabled = false;
   if (!creating) $("gate-confirm").value = "";
 }
@@ -140,6 +152,11 @@ async function chooseLocation(command) {
     $("gate-error").textContent = String(err);
   }
 }
+
+$("gate-use-recovery").addEventListener("click", () => {
+  $("gate-error").textContent = "";
+  openRecoveryUnlock();
+});
 
 $("loc-change").addEventListener("click", () =>
   chooseLocation(gateMode === "unlock" ? "pick_existing_vault" : "pick_new_location"));
@@ -192,10 +209,18 @@ $("gate-form").addEventListener("submit", async (event) => {
     };
     if (creating) args.calibrateMs = 900;
 
-    state.info = await invoke(creating ? "create_vault" : "unlock", args);
+    let command = creating ? "create_vault" : "unlock";
+    if (!creating && gateRecoveryMode) {
+      command = "unlock_with_recovery";
+      args.code = args.password;
+      delete args.password;
+    }
+
+    state.info = await invoke(command, args);
     $("gate-password").value = "";
     $("gate-confirm").value = "";
     enterApp();
+    if (creating) await openRecovery(true);
   } catch (err) {
     error.textContent = String(err);
     $("gate-password").select();
@@ -634,7 +659,7 @@ async function openSettings() {
   $("s-path").textContent = info.path;
   $("s-count").textContent = String(info.entryCount);
   $("s-revision").textContent = String(info.revision);
-  $("s-slots").textContent = info.slots.map((s) => s.label).join(", ");
+  renderSlots(info.slots);
   $("s-autolock").value = String(Math.round(info.autoLockSecs / 60));
   $("s-autolock-val").textContent = $("s-autolock").value;
   $("s-error").textContent = "";
@@ -652,6 +677,72 @@ async function openSettings() {
   }
   $("settings-scrim").hidden = false;
 }
+
+function renderSlots(slots) {
+  const host = $("s-slots");
+  host.replaceChildren();
+  const portable = slots.filter((s) => s.portable).length;
+
+  for (const slot of slots) {
+    const row = h("div", "slot");
+
+    const body = h("span", "slot__body");
+    body.append(h("span", "slot__label", slot.label));
+    const added = slot.createdAt ? slot.createdAt.slice(0, 10) : "";
+    body.append(h("span", "slot__meta", slot.kind + (added ? "  -  added " + added : "")));
+    row.append(body);
+
+    row.append(
+      h("span", "slot__tag" + (slot.portable ? " slot__tag--portable" : ""),
+        slot.portable ? "portable" : "this machine")
+    );
+
+    const remove = h("button", "icon-btn");
+    remove.append(icon("i-trash"));
+    const lastPortable = slot.portable && portable <= 1;
+    const onlySlot = slots.length <= 1;
+    if (lastPortable || onlySlot) {
+      remove.disabled = true;
+      remove.title = onlySlot
+        ? "This is the only way into the vault."
+        : "The last portable credential. Add a recovery code first, then this can go.";
+      remove.classList.add("icon-btn--off");
+    } else {
+      remove.title = "Remove " + slot.label;
+      remove.addEventListener("click", () => removeSlot(slot));
+    }
+    row.append(remove);
+    host.append(row);
+  }
+}
+
+async function removeSlot(slot) {
+  const error = $("s-slots-error");
+  error.textContent = "";
+  const button = $("s-slots").querySelector('[title^="Remove"]');
+  if (button && button.dataset.armed !== "1") {
+    button.dataset.armed = "1";
+    button.classList.add("btn--danger");
+    toast("Click again to remove " + slot.label, "warn");
+    setTimeout(() => {
+      button.dataset.armed = "0";
+      button.classList.remove("btn--danger");
+    }, 4000);
+    return;
+  }
+  try {
+    state.info = await invoke("remove_slot", { id: slot.id });
+    renderSlots(state.info.slots);
+    toast(slot.label + " removed");
+  } catch (err) {
+    error.textContent = String(err);
+  }
+}
+
+$("s-add-recovery").addEventListener("click", async () => {
+  $("s-slots-error").textContent = "";
+  await openRecovery(false);
+});
 
 $("s-move").addEventListener("click", async () => {
   const error = $("s-loc-error");
@@ -711,6 +802,105 @@ $("s-change").addEventListener("click", async () => {
   }
 });
 
+let rcPendingSlot = null;
+let rcMandatory = false;
+
+async function openRecovery(mandatory) {
+  rcMandatory = Boolean(mandatory);
+  rcPendingSlot = null;
+  $("rc-error").textContent = "";
+  $("rc-typed").value = "";
+  showCode("");
+  $("rc-cancel").hidden = rcMandatory;
+  $("rc-lede").textContent = rcMandatory
+    ? "Before you put anything in the vault, take this down."
+    : "Write this down. It is shown once.";
+  $("rc-scrim").hidden = false;
+
+  try {
+    const issued = await invoke("create_recovery_code", { label: "Recovery code" });
+    rcPendingSlot = issued.slot;
+    showCode(issued.code);
+    $("rc-typed").focus();
+  } catch (err) {
+    showCode("");
+    $("rc-error").textContent =
+      String(err) + " - the vault itself is safe; close Obscura and reopen it with your master password, then try again from Settings.";
+    $("rc-cancel").hidden = false;
+  }
+}
+
+function showCode(code) {
+  const host = $("rc-code");
+  host.replaceChildren();
+  host.dataset.code = code;
+  for (const group of code.split("-").filter(Boolean)) {
+    host.append(h("span", "rc__group", group));
+  }
+}
+
+$("rc-copy").addEventListener("click", async () => {
+  const value = $("rc-code").dataset.code || "";
+  if (!value.trim()) return;
+  try {
+    await invoke("copy_text", { text: value, clearAfter: 120 });
+    toast("Copied - clipboard clears in two minutes");
+  } catch (err) {
+    toast(String(err), "warn");
+  }
+});
+
+$("rc-confirm").addEventListener("click", async () => {
+  const typed = $("rc-typed").value;
+  const error = $("rc-error");
+  error.textContent = "";
+  if (!typed.trim()) {
+    error.textContent = "Type the code above to confirm you have it.";
+    return;
+  }
+  try {
+    await invoke("verify_recovery_code", { code: typed });
+    $("rc-scrim").hidden = true;
+    showCode("");
+    $("rc-typed").value = "";
+    rcPendingSlot = null;
+    rcMandatory = false;
+    await refresh();
+    toast("Recovery code confirmed");
+  } catch (err) {
+    error.textContent = String(err);
+  }
+});
+
+$("rc-cancel").addEventListener("click", async () => {
+  if (rcPendingSlot) {
+    try {
+      state.info = await invoke("remove_slot", { id: rcPendingSlot });
+    } catch (err) {
+      toast(String(err), "warn");
+    }
+  }
+  rcPendingSlot = null;
+  showCode("");
+  $("rc-typed").value = "";
+  $("rc-scrim").hidden = true;
+  await refresh();
+});
+
+function openRecoveryUnlock() {
+  gateRecoveryMode = !gateRecoveryMode;
+  const on = gateRecoveryMode;
+  $("gate-label").textContent = on ? "Recovery code" : "Master password";
+  $("gate-password").type = on ? "text" : "password";
+  $("gate-password").value = "";
+  $("gate-password").placeholder = on ? "XXXXXXXX-XXXXXXXX-..." : "................";
+  $("gate-submit").textContent = on ? "Unlock with code" : "Unlock";
+  $("gate-use-recovery").textContent = on
+    ? "Use the master password instead"
+    : "Use a recovery code instead";
+  $("gate-password").focus();
+}
+
 $("btn-new").addEventListener("click", () => openEditor(null));
 $("btn-generator").addEventListener("click", () => { $("gen-scrim").hidden = false; generate(); });
 $("btn-settings").addEventListener("click", openSettings);
@@ -725,7 +915,7 @@ document.querySelectorAll("[data-close]").forEach((button) => {
 
 document.querySelectorAll(".scrim").forEach((scrim) => {
   scrim.addEventListener("mousedown", (event) => {
-    if (event.target === scrim) scrim.hidden = true;
+    if (event.target === scrim && scrim.dataset.locked !== "true") scrim.hidden = true;
   });
 });
 
@@ -738,7 +928,8 @@ $("search").addEventListener("input", () => {
 document.addEventListener("keydown", (event) => {
   if (event.key === "Escape") {
     const open = [...document.querySelectorAll(".scrim")].find((s) => !s.hidden);
-    if (open) { open.hidden = true; return; }
+    if (open && open.dataset.locked !== "true") { open.hidden = true; return; }
+    if (open) return;
   }
   if (!event.ctrlKey && !event.metaKey) return;
   const key = event.key.toLowerCase();

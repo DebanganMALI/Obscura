@@ -46,6 +46,10 @@ pub fn run() {
             commands::totp_code,
             commands::generate,
             commands::change_master_password,
+            commands::create_recovery_code,
+            commands::verify_recovery_code,
+            commands::unlock_with_recovery,
+            commands::remove_slot,
         ])
         .setup(|app| {
             spawn_auto_lock_clock(app.handle().clone());
