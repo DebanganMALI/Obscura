@@ -97,6 +97,7 @@
       <div class="gate__go">
         <p class="error" id="gate-error"></p>
         <button class="btn btn--primary btn--block" type="submit" id="gate-submit">Unlock</button>
+        <button class="loc__alt center" type="button" id="gate-use-recovery" hidden>Use a recovery code instead</button>
       </div>
     </form>
   </section>
@@ -246,8 +247,22 @@
       <div class="kv"><span class="kv__k">Location</span><span class="kv__v mono" id="s-path"></span></div>
       <div class="kv"><span class="kv__k">Entries</span><span class="kv__v" id="s-count"></span></div>
       <div class="kv"><span class="kv__k">Revision</span><span class="kv__v mono" id="s-revision"></span></div>
-      <div class="kv"><span class="kv__k">Unlock methods</span><span class="kv__v" id="s-slots"></span></div>
       <div class="kv"><span class="kv__k">Remembered</span><span class="kv__v" id="s-remembered"></span></div>
+    </div>
+
+    <div class="section">
+      <p class="section__label">Unlock methods</p>
+      <div class="card">
+        <div id="s-slots"></div>
+        <p class="hint">A password lives in your head and a recovery code lives on
+          paper; both move to a new machine. Obscura will not let you remove the last
+          one of those, because a vault that only this computer can open is a vault
+          you lose with the computer.</p>
+        <div class="row-inline mt-20">
+          <button class="btn btn--ghost" type="button" id="s-add-recovery">Add recovery code</button>
+        </div>
+        <p class="error" id="s-slots-error"></p>
+      </div>
     </div>
 
     <div class="section">
@@ -301,6 +316,37 @@
 
     <div class="modal__foot">
       <button class="btn btn--ghost" type="button" data-close="settings-scrim">Close</button>
+    </div>
+  </div>
+</div>
+
+<div class="scrim" id="rc-scrim" data-locked="true" hidden>
+  <div class="modal modal--narrow" role="dialog" aria-modal="true" aria-labelledby="rc-title">
+    <h2 class="modal__title" id="rc-title">Recovery code</h2>
+    <p class="serif-it lede" id="rc-lede">Write this down. It is shown once.</p>
+
+    <div class="rc__code mono" id="rc-code">&nbsp;</div>
+
+    <div class="row-inline mt-20">
+      <button class="btn btn--ghost" type="button" id="rc-copy">Copy</button>
+    </div>
+
+    <p class="rc__why">This code opens the vault on its own, without the master
+      password. Keep it somewhere a thief would not look and a fire would not
+      reach. Obscura cannot show it again and cannot recreate it.</p>
+
+    <div class="field mt-20">
+      <label class="field__label" for="rc-typed">Type it back to confirm</label>
+      <textarea class="textarea input--mono" id="rc-typed" spellcheck="false"
+                autocomplete="off" placeholder="XXXXXXXX-XXXXXXXX-..."></textarea>
+      <p class="hint">Case, spaces and hyphens do not matter.</p>
+    </div>
+
+    <p class="error" id="rc-error"></p>
+
+    <div class="modal__foot">
+      <button class="btn btn--ghost" type="button" id="rc-cancel" hidden>Cancel</button>
+      <button class="btn btn--primary" type="button" id="rc-confirm">Confirm</button>
     </div>
   </div>
 </div>

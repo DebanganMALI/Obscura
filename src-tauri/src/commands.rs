@@ -5,8 +5,9 @@ use std::{path::PathBuf, time::Duration};
 
 use obscura_crypto::{kdf, KdfParams};
 use obscura_vault::{
+    format::SlotKind,
     generator::{self, PasswordPolicy},
-    Credential, Entry, SecretString, Totp, Vault,
+    Credential, Entry, RecoveryCode, SecretString, Totp, Vault,
 };
 use tauri::{Manager, State};
 use tauri_plugin_dialog::DialogExt;
@@ -16,8 +17,8 @@ use zeroize::Zeroizing;
 use crate::{
     clipboard,
     dto::{
-        CustomFieldView, EntryDetail, EntryInput, EntrySummary, GeneratedPassword, LocationProbe,
-        RelocateResult, SlotView, TotpCode, VaultInfo,
+        CustomFieldView, EntryDetail, EntryInput, EntrySummary, GeneratedPassword,
+        IssuedRecoveryCode, LocationProbe, RelocateResult, SlotView, TotpCode, VaultInfo,
     },
     location,
     state::{AppState, Session},
@@ -63,6 +64,11 @@ fn info(session: &Session, auto_lock_secs: u64) -> VaultInfo {
                 id: slot.id,
                 kind: format!("{:?}", slot.kind).to_lowercase(),
                 label: slot.label.clone(),
+                created_at: slot
+                    .created_at
+                    .format(&time::format_description::well_known::Rfc3339)
+                    .unwrap_or_default(),
+                portable: matches!(slot.kind, SlotKind::Password | SlotKind::Recovery),
             })
             .collect(),
         path: session.path.display().to_string(),
@@ -538,5 +544,84 @@ pub fn relocate_vault(
         info: result,
         previous: previous.display().to_string(),
         previous_removed,
+    })
+}
+
+#[tauri::command]
+pub fn create_recovery_code(
+    state: State<'_, AppState>,
+    label: String,
+) -> Result<IssuedRecoveryCode, String> {
+    let label = if label.trim().is_empty() {
+        "Recovery code".to_owned()
+    } else {
+        label.trim().to_owned()
+    };
+
+    state.with_session(|session| {
+        let (slot, code) = session
+            .vault
+            .add_recovery_slot(label)
+            .map_err(|e| e.to_string())?;
+        let path = session.path.clone();
+        session.vault.save(&path).map_err(|e| e.to_string())?;
+        session.min_revision = session.vault.revision();
+        Ok(IssuedRecoveryCode {
+            slot,
+            code: code.to_printable(),
+        })
+    })
+}
+
+#[tauri::command]
+pub fn verify_recovery_code(state: State<'_, AppState>, code: String) -> Result<(), String> {
+    let parsed = RecoveryCode::parse(code.trim()).map_err(|e| e.to_string())?;
+    let path = state.with_session(|session| Ok(session.path.clone()))?;
+
+    Vault::open(&path, &Credential::Identity(&parsed.identity()), None)
+        .map_err(|_| "that code does not open this vault".to_owned())?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn unlock_with_recovery(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    path: Option<String>,
+    code: String,
+    remember: Option<bool>,
+) -> Result<VaultInfo, String> {
+    let parsed = RecoveryCode::parse(code.trim()).map_err(|e| e.to_string())?;
+    let target = resolve(&app, path)?;
+
+    if !target.exists() {
+        return Err(format!("no vault found at {}", target.display()));
+    }
+
+    let vault = Vault::open(&target, &Credential::Identity(&parsed.identity()), None)
+        .map_err(|_| "that recovery code does not open this vault".to_owned())?;
+    apply_remember(&app, &target, remember);
+
+    let revision = vault.revision();
+    let session = Session {
+        vault,
+        path: target,
+        last_activity: std::time::Instant::now(),
+        min_revision: revision,
+    };
+    let summary = info(&session, state.auto_lock().as_secs());
+    state.set(session);
+    Ok(summary)
+}
+
+#[tauri::command]
+pub fn remove_slot(state: State<'_, AppState>, id: Uuid) -> Result<VaultInfo, String> {
+    let secs = state.auto_lock().as_secs();
+    state.with_session(|session| {
+        session.vault.remove_slot(id).map_err(|e| e.to_string())?;
+        let path = session.path.clone();
+        session.vault.save(&path).map_err(|e| e.to_string())?;
+        session.min_revision = session.vault.revision();
+        Ok(info(session, secs))
     })
 }
