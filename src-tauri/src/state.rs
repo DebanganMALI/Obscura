@@ -86,7 +86,6 @@ impl AppState {
             .lock()
             .map_err(|_| "the vault state is poisoned".to_owned())?;
         let session = guard.as_mut().ok_or_else(|| "locked".to_owned())?;
-        session.mark_active();
         f(session)
     }
 
@@ -187,6 +186,41 @@ mod tests {
         assert!(
             state.lock_if_idle(),
             "a last-seen time in the future means the clock moved, and locking is the safe answer"
+        );
+    }
+
+    #[test]
+    fn a_background_poll_does_not_hold_the_vault_open() {
+        let state = AppState::default();
+        state.set_auto_lock(Duration::from_secs(60));
+
+        let mut idled = session();
+        idled.last_seen = SystemTime::now() - Duration::from_secs(3600);
+        state.set(idled);
+
+        state.with_session(|_| Ok(())).unwrap();
+
+        assert!(
+            state.lock_if_idle(),
+            "reading through with_session must not count as activity, or a one-second \
+             TOTP poll keeps the vault unlocked for as long as the entry is on screen"
+        );
+    }
+
+    #[test]
+    fn an_explicit_touch_does_hold_the_vault_open() {
+        let state = AppState::default();
+        state.set_auto_lock(Duration::from_secs(60));
+
+        let mut idled = session();
+        idled.last_seen = SystemTime::now() - Duration::from_secs(3600);
+        state.set(idled);
+
+        state.touch();
+
+        assert!(
+            !state.lock_if_idle(),
+            "real input still refreshes the timer - the frontend sends touch on pointerdown and keydown"
         );
     }
 }
