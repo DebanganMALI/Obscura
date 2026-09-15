@@ -276,6 +276,14 @@ impl Vault {
             .count()
     }
 
+    pub fn accepts(&self, credential: &Credential<'_>) -> Result<bool, VaultError> {
+        match unlock(&self.header, credential, KdfParams::from(self.header.kdf)) {
+            Ok(key) => Ok(key == self.key),
+            Err(VaultError::NoMatchingSlot) => Ok(false),
+            Err(other) => Err(other),
+        }
+    }
+
     pub fn remove_slot(&mut self, id: Uuid) -> Result<(), VaultError> {
         if self.header.slots.len() <= 1 {
             return Err(VaultError::LastSlot);

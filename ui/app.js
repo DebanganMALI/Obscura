@@ -77,15 +77,25 @@ function confirmRevision(detail) {
     const error = $("rb-error");
     const accept = $("rb-accept");
     const cancel = $("rb-cancel");
-    const rollback = detail.confirm.reason === "rollback";
     const expected = detail.confirm.expected;
+    const wording = {
+      rollback: [
+        "This vault looks older than it should",
+        "Obscura has seen a newer version of this vault on this computer.",
+      ],
+      unreadable: [
+        "The rollback record could not be read",
+        "Obscura cannot tell whether this file has been rolled back.",
+      ],
+      damaged: [
+        "The rollback record does not match",
+        "Obscura cannot tell whether this file has been rolled back.",
+      ],
+    };
+    const [title, lede] = wording[detail.confirm.reason] || wording.damaged;
 
-    $("rb-title").textContent = rollback
-      ? "This vault looks older than it should"
-      : "The rollback record does not match";
-    $("rb-lede").textContent = rollback
-      ? "Obscura has seen a newer version of this vault on this computer."
-      : "Obscura cannot tell whether this file has been rolled back.";
+    $("rb-title").textContent = title;
+    $("rb-lede").textContent = lede;
     $("rb-found").textContent = String(detail.confirm.found);
     $("rb-expected").textContent = expected === null || expected === undefined ? "-" : String(expected);
     $("rb-expected-box").hidden = expected === null || expected === undefined;
@@ -296,7 +306,7 @@ $("gate-form").addEventListener("submit", async (event) => {
     $("gate-password").value = "";
     $("gate-confirm").value = "";
     enterApp();
-    if (creating) await openRecovery(true);
+    if (creating || !hasRecoverySlot()) await openRecovery(true);
   } catch (err) {
     error.textContent = errText(err);
     $("gate-password").select();
@@ -946,6 +956,11 @@ $("s-change").addEventListener("click", async () => {
 let rcPendingSlot = null;
 let rcMandatory = false;
 
+function hasRecoverySlot() {
+  const slots = state.info && state.info.slots;
+  return Array.isArray(slots) && slots.some((slot) => slot.kind === "recovery");
+}
+
 async function openRecovery(mandatory) {
   rcMandatory = Boolean(mandatory);
   rcPendingSlot = null;
@@ -954,7 +969,7 @@ async function openRecovery(mandatory) {
   showCode("");
   $("rc-cancel").hidden = rcMandatory;
   $("rc-lede").textContent = rcMandatory
-    ? "Before you put anything in the vault, take this down."
+    ? "Take this down before you go on. Without it, a forgotten master password ends the vault."
     : "Write this down. It is shown once.";
   $("rc-scrim").hidden = false;
 
@@ -1000,7 +1015,7 @@ $("rc-confirm").addEventListener("click", async () => {
     return;
   }
   try {
-    await invoke("verify_recovery_code", { code: typed });
+    state.info = await invoke("confirm_recovery_code", { code: typed });
     $("rc-scrim").hidden = true;
     showCode("");
     $("rc-typed").value = "";
@@ -1016,7 +1031,7 @@ $("rc-confirm").addEventListener("click", async () => {
 $("rc-cancel").addEventListener("click", async () => {
   if (rcPendingSlot) {
     try {
-      state.info = await invoke("remove_slot", { id: rcPendingSlot });
+      state.info = await invoke("discard_recovery_code", { id: rcPendingSlot });
     } catch (err) {
       toast(String(err), "warn");
     }
