@@ -163,13 +163,7 @@ pub fn create_vault(
     watermark::record(&app, &vault)?;
     apply_remember(&app, &target, remember);
 
-    let revision = vault.revision();
-    let session = Session {
-        vault,
-        path: target,
-        last_activity: std::time::Instant::now(),
-        min_revision: revision,
-    };
+    let session = Session::new(vault, target);
     let summary = info(&session, state.auto_lock().as_secs());
     state.set(session);
     Ok(summary)
@@ -206,13 +200,7 @@ pub fn unlock(
     admit(&app, &vault, accept_revision)?;
     apply_remember(&app, &target, remember);
 
-    let revision = vault.revision();
-    let session = Session {
-        vault,
-        path: target,
-        last_activity: std::time::Instant::now(),
-        min_revision: revision,
-    };
+    let session = Session::new(vault, target);
     let summary = info(&session, state.auto_lock().as_secs());
     state.set(session);
     Ok(summary)
@@ -654,13 +642,7 @@ pub fn unlock_with_recovery(
     admit(&app, &vault, accept_revision)?;
     apply_remember(&app, &target, remember);
 
-    let revision = vault.revision();
-    let session = Session {
-        vault,
-        path: target,
-        last_activity: std::time::Instant::now(),
-        min_revision: revision,
-    };
+    let session = Session::new(vault, target);
     let summary = info(&session, state.auto_lock().as_secs());
     state.set(session);
     Ok(summary)

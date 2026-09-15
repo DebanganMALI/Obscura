@@ -26,6 +26,25 @@ fn watermark_data(vault_id: Uuid, revision: u64) -> Vec<u8> {
     data
 }
 
+#[cfg(unix)]
+const OWNER_ONLY: u32 = 0o600;
+
+#[cfg(unix)]
+fn restrict(path: &Path) -> Result<(), VaultError> {
+    use std::os::unix::fs::PermissionsExt as _;
+    fs::set_permissions(path, fs::Permissions::from_mode(OWNER_ONLY)).map_err(|e| {
+        VaultError::Io(format!(
+            "cannot restrict permissions on {}: {e}",
+            path.display()
+        ))
+    })
+}
+
+#[cfg(not(unix))]
+fn restrict(_path: &Path) -> Result<(), VaultError> {
+    Ok(())
+}
+
 pub struct Vault {
     header: VaultHeader,
     key: SecretKey,
@@ -174,7 +193,15 @@ impl Vault {
 
         let temp = path.with_extension("obscura.tmp");
         {
-            let mut file = fs::File::create(&temp)
+            let mut options = fs::OpenOptions::new();
+            options.write(true).create(true).truncate(true);
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::OpenOptionsExt as _;
+                options.mode(OWNER_ONLY);
+            }
+            let mut file = options
+                .open(&temp)
                 .map_err(|e| VaultError::Io(format!("cannot create temporary file: {e}")))?;
             file.write_all(&bytes)
                 .map_err(|e| VaultError::Io(format!("cannot write vault: {e}")))?;
@@ -186,6 +213,7 @@ impl Vault {
             let backup = path.with_extension("obscura.bak");
             fs::copy(path, &backup)
                 .map_err(|e| VaultError::Io(format!("cannot write backup: {e}")))?;
+            restrict(&backup)?;
         }
 
         fs::rename(&temp, path)
