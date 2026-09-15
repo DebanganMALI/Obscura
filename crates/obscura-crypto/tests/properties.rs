@@ -17,9 +17,18 @@ fn aead_round_trips() {
     let key = SecretKey::random().unwrap();
     let sealed = aead::seal(&key, b"header", b"attack at dawn").unwrap();
     assert_eq!(
-        aead::open(&key, b"header", &sealed).unwrap(),
+        aead::open(&key, b"header", &sealed).unwrap().as_slice(),
         b"attack at dawn"
     );
+}
+
+#[test]
+fn a_decrypted_buffer_carries_its_own_wipe() {
+    let key = SecretKey::random().unwrap();
+    let sealed = aead::seal(&key, b"", b"hunter2").unwrap();
+
+    let plain: zeroize::Zeroizing<Vec<u8>> = aead::open(&key, b"", &sealed).unwrap();
+    assert_eq!(plain.as_slice(), b"hunter2");
 }
 
 #[test]

@@ -11,6 +11,7 @@ use obscura_crypto::{
 };
 use time::OffsetDateTime;
 use uuid::Uuid;
+use zeroize::Zeroizing;
 
 use crate::{
     entry::Entry,
@@ -177,8 +178,8 @@ impl Vault {
         for entry in &self.entries {
             let key = entry_key(&self.key, entry.id)?;
             let aad = format::entry_aad(self.header.vault_id, entry.id);
-            let mut plaintext = Vec::new();
-            ciborium::into_writer(entry, &mut plaintext)
+            let mut plaintext = Zeroizing::new(Vec::new());
+            ciborium::into_writer(entry, &mut *plaintext)
                 .map_err(|_| VaultError::Corrupt("an entry could not be encoded"))?;
             sealed.push(SealedEntry {
                 id: entry.id,
@@ -186,8 +187,8 @@ impl Vault {
             });
         }
 
-        let mut table = Vec::new();
-        ciborium::into_writer(&sealed, &mut table)
+        let mut table = Zeroizing::new(Vec::new());
+        ciborium::into_writer(&sealed, &mut *table)
             .map_err(|_| VaultError::Corrupt("the entry table could not be encoded"))?;
 
         let header_bytes = format::encode_header(&self.header)?;

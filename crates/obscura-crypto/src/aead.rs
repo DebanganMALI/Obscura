@@ -2,6 +2,7 @@ use chacha20poly1305::{
     aead::{Aead, KeyInit, Payload},
     XChaCha20Poly1305, XNonce,
 };
+use zeroize::Zeroizing;
 
 use crate::{error::CryptoError, secret::SecretKey};
 
@@ -39,7 +40,7 @@ pub fn seal(key: &SecretKey, aad: &[u8], plaintext: &[u8]) -> Result<Vec<u8>, Cr
     Ok(out)
 }
 
-pub fn open(key: &SecretKey, aad: &[u8], sealed: &[u8]) -> Result<Vec<u8>, CryptoError> {
+pub fn open(key: &SecretKey, aad: &[u8], sealed: &[u8]) -> Result<Zeroizing<Vec<u8>>, CryptoError> {
     if sealed.len() < OVERHEAD {
         return Err(CryptoError::Authentication);
     }
@@ -59,5 +60,6 @@ pub fn open(key: &SecretKey, aad: &[u8], sealed: &[u8]) -> Result<Vec<u8>, Crypt
                 aad,
             },
         )
+        .map(Zeroizing::new)
         .map_err(|_| CryptoError::Authentication)
 }
