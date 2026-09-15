@@ -657,8 +657,15 @@ function openEditor(detail) {
   $("e-title").value = detail ? detail.title : "";
   $("e-username").value = detail ? detail.username : "";
   $("e-password").value = "";
-  $("e-url").value = detail && detail.urls.length ? detail.urls[0] : "";
+  $("e-kind").value = detail ? detail.kind : "login";
+  $("e-url").value = detail ? detail.urls.join("\n") : "";
   $("e-totp").value = "";
+  const carries = Boolean(detail && detail.hasTotp);
+  $("e-totp-hint").textContent = carries
+    ? "This entry already has a code. Leave this blank to keep it, or paste a new URI to replace it."
+    : "";
+  $("e-totp-drop-row").hidden = !carries;
+  $("e-totp-drop").checked = false;
   $("e-notes").value = detail ? detail.notes : "";
   $("e-tags").value = detail ? detail.tags.join(", ") : "";
   $("e-favorite").checked = detail ? detail.favorite : false;
@@ -673,20 +680,20 @@ function openEditor(detail) {
 $("editor-form").addEventListener("submit", async (event) => {
   event.preventDefault();
   const password = $("e-password").value;
-  const url = $("e-url").value.trim();
   const totp = $("e-totp").value.trim();
+  const dropping = $("e-totp-drop").checked;
 
   const input = {
     id: state.editing,
-    kind: "login",
+    kind: $("e-kind").value,
     title: $("e-title").value.trim(),
     username: $("e-username").value.trim(),
     password: password ? password : null,
-    urls: url ? [url] : [],
+    urls: $("e-url").value.split("\n").map((u) => u.trim()).filter(Boolean),
     notes: $("e-notes").value,
     tags: $("e-tags").value.split(",").map((t) => t.trim()).filter(Boolean),
     favorite: $("e-favorite").checked,
-    totpUri: totp ? totp : null,
+    totpUri: totp ? totp : dropping ? "" : null,
   };
 
   try {
