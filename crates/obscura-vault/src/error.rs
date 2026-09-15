@@ -21,4 +21,25 @@ pub enum VaultError {
 
     #[error("the system clock is before the Unix epoch")]
     Clock,
+
+    #[error("{0}")]
+    Io(String),
+
+    #[error("not an Obscura vault")]
+    BadMagic,
+
+    #[error("unsupported vault format version {0}")]
+    UnsupportedVersion(u16),
+
+    #[error("the vault file is corrupt: {0}")]
+    Corrupt(&'static str),
+
+    #[error("could not unlock the vault with that credential")]
+    NoMatchingSlot,
+
+    #[error("vault rolled back: file is at revision {found}, expected at least {expected}")]
+    Rollback { found: u64, expected: u64 },
+
+    #[error("cannot remove the last unlock slot")]
+    LastSlot,
 }
