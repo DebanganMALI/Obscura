@@ -315,10 +315,40 @@ function enterApp() {
   $("search").focus();
 }
 
-async function leaveApp(message) {
+function wipe() {
   clearInterval(state.totpTimer);
+  state.totpTimer = null;
+  state.info = null;
   state.entries = [];
   state.selected = null;
+  state.editing = null;
+
+  document.querySelectorAll(".scrim").forEach((scrim) => {
+    scrim.hidden = true;
+  });
+
+  $("detail").innerHTML = "";
+  $("list").innerHTML = "";
+  $("entry-count").textContent = "0 entries";
+  $("search").value = "";
+  $("gen-out").textContent = "\u00a0";
+  $("gen-bits").textContent = "0";
+  $("rc-code").textContent = "\u00a0";
+  $("s-hello-out").textContent = "";
+  $("s-hello-out").hidden = true;
+
+  document.querySelectorAll("#app input, #app textarea, .scrim input, .scrim textarea")
+    .forEach((field) => {
+      if (field.type !== "checkbox" && field.type !== "range") field.value = "";
+    });
+
+  document.querySelectorAll(".error").forEach((line) => {
+    line.textContent = "";
+  });
+}
+
+async function leaveApp(message) {
+  wipe();
   $("app").hidden = true;
   $("gate").hidden = false;
   await refreshGate();
