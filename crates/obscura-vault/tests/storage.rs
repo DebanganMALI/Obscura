@@ -381,3 +381,141 @@ fn opening_a_missing_file_reports_io_rather_than_panicking() {
         Err(VaultError::Io(_))
     ));
 }
+
+#[test]
+fn a_recovery_code_opens_the_vault() {
+    let mut vault = seeded_vault();
+    let (_id, code) = vault.add_recovery_slot("printed code").unwrap();
+    let bytes = vault.to_bytes().unwrap();
+
+    let reopened =
+        Vault::from_bytes(&bytes, &Credential::Identity(&code.identity()), None).unwrap();
+    assert_eq!(reopened.len(), vault.len());
+}
+
+#[test]
+fn a_recovery_code_survives_a_round_trip_through_paper() {
+    let mut vault = seeded_vault();
+    let (_id, code) = vault.add_recovery_slot("printed code").unwrap();
+    let bytes = vault.to_bytes().unwrap();
+
+    let written_down = code.to_printable().to_lowercase().replace('-', " ");
+    let typed_back = obscura_vault::RecoveryCode::parse(&written_down).unwrap();
+
+    assert!(Vault::from_bytes(&bytes, &Credential::Identity(&typed_back.identity()), None).is_ok());
+}
+
+#[test]
+fn the_last_portable_slot_cannot_be_removed() {
+    let mut vault = seeded_vault();
+    let hardware = new_recovery_identity().unwrap();
+    vault
+        .add_identity_slot(SlotKind::Hardware, "Windows Hello", &hardware)
+        .unwrap();
+
+    let password_slot = vault
+        .slots()
+        .iter()
+        .find(|s| s.kind == SlotKind::Password)
+        .unwrap()
+        .id;
+
+    assert_eq!(
+        vault.remove_slot(password_slot),
+        Err(VaultError::LastPortableSlot)
+    );
+    assert!(Vault::from_bytes(
+        &vault.to_bytes().unwrap(),
+        &Credential::Password(PASSWORD),
+        None
+    )
+    .is_ok());
+}
+
+#[test]
+fn the_password_can_be_removed_once_a_recovery_code_exists() {
+    let mut vault = seeded_vault();
+    let (_id, code) = vault.add_recovery_slot("printed code").unwrap();
+    let hardware = new_recovery_identity().unwrap();
+    vault
+        .add_identity_slot(SlotKind::Hardware, "Windows Hello", &hardware)
+        .unwrap();
+
+    let password_slot = vault
+        .slots()
+        .iter()
+        .find(|s| s.kind == SlotKind::Password)
+        .unwrap()
+        .id;
+    vault.remove_slot(password_slot).unwrap();
+
+    let bytes = vault.to_bytes().unwrap();
+    assert!(Vault::from_bytes(&bytes, &Credential::Password(PASSWORD), None).is_err());
+    assert!(Vault::from_bytes(&bytes, &Credential::Identity(&code.identity()), None).is_ok());
+    assert!(Vault::from_bytes(&bytes, &Credential::Identity(&hardware), None).is_ok());
+}
+
+#[test]
+fn a_hardware_slot_can_always_be_removed() {
+    let mut vault = seeded_vault();
+    let hardware = new_recovery_identity().unwrap();
+    let slot = vault
+        .add_identity_slot(SlotKind::Hardware, "Windows Hello", &hardware)
+        .unwrap();
+
+    vault.remove_slot(slot).unwrap();
+    assert_eq!(vault.portable_slots(), 1);
+}
+
+#[test]
+fn the_last_recovery_code_cannot_be_removed_either() {
+    let mut vault = seeded_vault();
+    let (recovery_slot, _code) = vault.add_recovery_slot("printed code").unwrap();
+    let hardware = new_recovery_identity().unwrap();
+    vault
+        .add_identity_slot(SlotKind::Hardware, "Windows Hello", &hardware)
+        .unwrap();
+
+    let password_slot = vault
+        .slots()
+        .iter()
+        .find(|s| s.kind == SlotKind::Password)
+        .unwrap()
+        .id;
+    vault.remove_slot(password_slot).unwrap();
+
+    assert_eq!(
+        vault.remove_slot(recovery_slot),
+        Err(VaultError::LastPortableSlot)
+    );
+}
+
+#[test]
+fn a_vault_down_to_one_slot_reports_the_plainer_error() {
+    let mut vault = seeded_vault();
+    let (recovery_slot, _code) = vault.add_recovery_slot("printed code").unwrap();
+
+    let password_slot = vault
+        .slots()
+        .iter()
+        .find(|s| s.kind == SlotKind::Password)
+        .unwrap()
+        .id;
+    vault.remove_slot(password_slot).unwrap();
+
+    assert_eq!(vault.remove_slot(recovery_slot), Err(VaultError::LastSlot));
+}
+
+#[test]
+fn changing_the_password_does_not_disturb_a_recovery_code() {
+    let mut vault = seeded_vault();
+    let (_id, code) = vault.add_recovery_slot("printed code").unwrap();
+
+    vault
+        .change_password(b"an entirely new master password", None)
+        .unwrap();
+    let bytes = vault.to_bytes().unwrap();
+
+    assert!(Vault::from_bytes(&bytes, &Credential::Identity(&code.identity()), None).is_ok());
+    assert!(Vault::from_bytes(&bytes, &Credential::Password(PASSWORD), None).is_err());
+}

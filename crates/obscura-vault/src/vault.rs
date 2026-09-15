@@ -14,6 +14,7 @@ use crate::{
     format::{
         self, KeySlot, SealedEntry, SlotKind, StoredKdf, VaultHeader, FORMAT_VERSION, PREFIX_LEN,
     },
+    recovery::RecoveryCode,
 };
 
 pub struct Vault {
@@ -205,15 +206,39 @@ impl Vault {
         Ok(id)
     }
 
+    pub fn add_recovery_slot(
+        &mut self,
+        label: impl Into<String>,
+    ) -> Result<(Uuid, RecoveryCode), VaultError> {
+        let code = RecoveryCode::generate()?;
+        let id = self.add_identity_slot(SlotKind::Recovery, label, &code.identity())?;
+        Ok((id, code))
+    }
+
+    #[must_use]
+    pub fn portable_slots(&self) -> usize {
+        self.header
+            .slots
+            .iter()
+            .filter(|slot| matches!(slot.kind, SlotKind::Password | SlotKind::Recovery))
+            .count()
+    }
+
     pub fn remove_slot(&mut self, id: Uuid) -> Result<(), VaultError> {
         if self.header.slots.len() <= 1 {
             return Err(VaultError::LastSlot);
         }
-        let before = self.header.slots.len();
-        self.header.slots.retain(|slot| slot.id != id);
-        if self.header.slots.len() == before {
+
+        let Some(target) = self.header.slots.iter().find(|slot| slot.id == id) else {
             return Err(VaultError::NoMatchingSlot);
+        };
+        let removing_portable = matches!(target.kind, SlotKind::Password | SlotKind::Recovery);
+
+        if removing_portable && self.portable_slots() <= 1 {
+            return Err(VaultError::LastPortableSlot);
         }
+
+        self.header.slots.retain(|slot| slot.id != id);
         Ok(())
     }
 
