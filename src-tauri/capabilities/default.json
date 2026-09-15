@@ -1,0 +1,13 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "The smallest permission set the Obscura window needs. Obscura deliberately grants no filesystem, shell, HTTP or clipboard permission to the webview: everything that touches a secret happens in Rust.",
+  "windows": ["main"],
+  "permissions": [
+    "core:app:default",
+    "core:event:default",
+    "core:window:default",
+    "core:webview:default",
+    "core:path:default"
+  ]
+}

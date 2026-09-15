@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members  = ["crates/*"]
+members  = ["crates/*", "src-tauri"]
 
 [workspace.package]
 version      = "0.1.0"
@@ -35,6 +35,10 @@ time       = { version = "0.3", features = ["serde", "formatting", "parsing"] }
 thiserror = "2"
 anyhow    = "1"
 tracing   = "0.1"
+
+tauri       = { version = "2", features = [] }
+tauri-build = { version = "2", features = [] }
+arboard     = { version = "3", default-features = false }
 
 obscura-crypto   = { path = "crates/obscura-crypto",   version = "0.1.0" }
 obscura-vault    = { path = "crates/obscura-vault",    version = "0.1.0" }
