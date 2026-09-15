@@ -27,6 +27,7 @@ tauri-build = { workspace = true }
 obscura-crypto = { workspace = true }
 obscura-vault  = { workspace = true }
 tauri          = { workspace = true }
+tauri-plugin-dialog = { workspace = true }
 arboard        = { workspace = true }
 serde          = { workspace = true }
 serde_json     = { workspace = true }
