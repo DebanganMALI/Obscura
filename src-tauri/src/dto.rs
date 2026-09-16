@@ -72,6 +72,14 @@ pub struct CustomFieldView {
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct CustomFieldInput {
+    pub name: String,
+    pub value: Option<String>,
+    pub hidden: bool,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct EntryInput {
     pub id: Option<Uuid>,
     pub kind: EntryKind,
@@ -83,6 +91,8 @@ pub struct EntryInput {
     pub tags: Vec<String>,
     pub favorite: bool,
     pub totp_uri: Option<String>,
+    #[serde(default)]
+    pub custom_fields: Vec<CustomFieldInput>,
 }
 
 #[derive(Debug, Clone, Serialize)]

@@ -575,6 +575,27 @@ async function renderDetail() {
     pane.append(section);
   }
 
+  if (detail.customFields.length) {
+    const section = h("section", "section");
+    section.append(h("p", "section__label", "Custom fields"));
+    const card = h("div", "card");
+    for (const field of detail.customFields) {
+      const actions = [];
+      if (field.hidden) {
+        actions.push(revealButton(detail.id, field.name));
+      }
+      actions.push(copyButton("Copy", async () => {
+        const value = field.hidden
+          ? await invoke("reveal_field", { id: detail.id, name: field.name })
+          : field.value;
+        await invoke("copy_text", { text: value, clearAfter: 60 });
+      }, "Copied - clipboard clears in a minute"));
+      card.append(kv(field.name, field.hidden ? "\u2022".repeat(10) : field.value, actions));
+    }
+    section.append(card);
+    pane.append(section);
+  }
+
   if (detail.notes) {
     const section = h("section", "section");
     section.append(h("p", "section__label", "Notes"));
@@ -591,6 +612,29 @@ async function renderDetail() {
     section.append(h("p", "serif-it", detail.tags.join("  -  ")));
     pane.append(section);
   }
+}
+
+function revealButton(id, name) {
+  const button = h("button", "icon-btn", null);
+  button.title = "Reveal";
+  button.append(icon("i-eye"));
+  let shown = false;
+  button.addEventListener("click", async (event) => {
+    const row = event.currentTarget.closest(".kv");
+    const cell = row && row.querySelector(".kv__v");
+    if (!cell) return;
+    try {
+      if (shown) {
+        cell.textContent = "\u2022".repeat(10);
+      } else {
+        cell.textContent = await invoke("reveal_field", { id, name });
+      }
+      shown = !shown;
+    } catch (err) {
+      toast(errText(err), "warn");
+    }
+  });
+  return button;
 }
 
 function kv(key, value, actions) {
@@ -647,6 +691,55 @@ function buildRing() {
   };
 }
 
+function addFieldRow(field) {
+  const row = h("div", "fieldrow");
+
+  const name = h("input", "input fieldrow__name");
+  name.placeholder = "Name";
+  name.spellcheck = false;
+  name.value = field ? field.name : "";
+
+  const value = h("input", "input input--mono");
+  value.placeholder = field && field.hidden ? "kept" : "Value";
+  value.type = field && field.hidden ? "password" : "text";
+  value.autocomplete = "off";
+  value.spellcheck = false;
+  value.value = field && !field.hidden ? field.value : "";
+  value.dataset.kept = field && field.hidden ? "1" : "";
+  value.addEventListener("input", () => {
+    value.dataset.kept = "";
+  });
+
+  const box = h("input");
+  box.type = "checkbox";
+  box.checked = Boolean(field && field.hidden);
+  box.addEventListener("change", () => {
+    value.type = box.checked ? "password" : "text";
+  });
+  const hide = h("label", "check");
+  hide.append(box, document.createTextNode(" Hide"));
+
+  const remove = h("button", "icon-btn", null);
+  remove.type = "button";
+  remove.title = "Remove";
+  remove.append(icon("i-trash"));
+  remove.addEventListener("click", () => row.remove());
+
+  row.append(name, value, hide, remove);
+  $("e-fields").append(row);
+}
+
+function collectFields() {
+  return [...$("e-fields").querySelectorAll(".fieldrow")]
+    .map((row) => {
+      const [name, value] = row.querySelectorAll("input.input");
+      const hidden = row.querySelector('input[type="checkbox"]').checked;
+      const keep = value.dataset.kept === "1" && !value.value;
+      return { name: name.value.trim(), value: keep ? null : value.value, hidden };
+    })
+    .filter((field) => field.name);
+}
+
 function openEditor(detail) {
   state.editing = detail ? detail.id : null;
   $("editor-title").textContent = detail ? "Edit entry" : "New entry";
@@ -664,6 +757,8 @@ function openEditor(detail) {
     : "";
   $("e-totp-drop-row").hidden = !carries;
   $("e-totp-drop").checked = false;
+  $("e-fields").replaceChildren();
+  if (detail) for (const field of detail.customFields) addFieldRow(field);
   $("e-notes").value = detail ? detail.notes : "";
   $("e-tags").value = detail ? detail.tags.join(", ") : "";
   $("e-favorite").checked = detail ? detail.favorite : false;
@@ -674,6 +769,8 @@ function openEditor(detail) {
   $("editor-scrim").hidden = false;
   $("e-title").focus();
 }
+
+$("e-field-add").addEventListener("click", () => addFieldRow(null));
 
 $("editor-form").addEventListener("submit", async (event) => {
   event.preventDefault();
@@ -692,6 +789,7 @@ $("editor-form").addEventListener("submit", async (event) => {
     tags: $("e-tags").value.split(",").map((t) => t.trim()).filter(Boolean),
     favorite: $("e-favorite").checked,
     totpUri: totp ? totp : dropping ? "" : null,
+    customFields: collectFields(),
   };
 
   try {

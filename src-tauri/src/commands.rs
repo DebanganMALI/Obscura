@@ -8,7 +8,7 @@ use obscura_vault::{
     csv_import,
     format::SlotKind,
     generator::{self, PasswordPolicy},
-    portable, Credential, Entry, RecoveryCode, SecretString, Totp, Vault,
+    portable, Credential, CustomField, Entry, RecoveryCode, SecretString, Totp, Vault,
 };
 use tauri::{Manager, State};
 use tauri_plugin_dialog::DialogExt;
@@ -309,6 +309,19 @@ pub fn get_entry(state: State<'_, AppState>, id: Uuid) -> Result<EntryDetail, St
 }
 
 #[tauri::command]
+pub fn reveal_field(state: State<'_, AppState>, id: Uuid, name: String) -> Result<String, String> {
+    state.with_session(|session| {
+        let entry = session.vault.get(id).ok_or("no such entry")?;
+        entry
+            .custom_fields
+            .iter()
+            .find(|field| field.name == name)
+            .map(|field| field.value.expose().to_owned())
+            .ok_or_else(|| "no such field".to_owned())
+    })
+}
+
+#[tauri::command]
 pub fn reveal_password(state: State<'_, AppState>, id: Uuid) -> Result<String, String> {
     state.with_session(|session| {
         let entry = session.vault.get(id).ok_or("no such entry")?;
@@ -357,6 +370,31 @@ pub fn save_entry(
     Ok(id)
 }
 
+fn rebuild_fields(entry: &mut Entry, input: &EntryInput) -> Vec<CustomField> {
+    let previous = std::mem::take(&mut entry.custom_fields);
+    let mut fields = Vec::with_capacity(input.custom_fields.len());
+
+    for sent in &input.custom_fields {
+        let name = sent.name.trim();
+        if name.is_empty() {
+            continue;
+        }
+        let value = match sent.value.as_deref() {
+            Some(text) => SecretString::from(text),
+            None => previous
+                .iter()
+                .find(|old| old.name == name)
+                .map_or_else(SecretString::default, |old| old.value.clone()),
+        };
+        fields.push(CustomField {
+            name: name.to_owned(),
+            value,
+            hidden: sent.hidden,
+        });
+    }
+    fields
+}
+
 fn apply(entry: &mut Entry, input: &EntryInput) -> Result<(), String> {
     entry.kind = input.kind;
     entry.title.clone_from(&input.title);
@@ -365,6 +403,7 @@ fn apply(entry: &mut Entry, input: &EntryInput) -> Result<(), String> {
     entry.notes = SecretString::from(input.notes.as_str());
     entry.tags.clone_from(&input.tags);
     entry.favorite = input.favorite;
+    entry.custom_fields = rebuild_fields(entry, input);
 
     match input.totp_uri.as_deref().map(str::trim) {
         Some("") => entry.totp = None,
@@ -829,7 +868,7 @@ pub fn remove_slot(
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used)]
+#[allow(clippy::unwrap_used, clippy::indexing_slicing)]
 mod tests {
     use super::*;
 
@@ -847,6 +886,7 @@ mod tests {
             tags: Vec::new(),
             favorite: false,
             totp_uri: None,
+            custom_fields: Vec::new(),
         }
     }
 
@@ -878,6 +918,61 @@ mod tests {
         apply(&mut entry, &sent).unwrap();
 
         assert_eq!(entry.kind, obscura_vault::EntryKind::Identity);
+    }
+
+    #[test]
+    fn a_hidden_field_keeps_its_value_when_the_editor_could_not_see_it() {
+        use crate::dto::CustomFieldInput;
+
+        let mut entry = Entry::new_login("Bank", "saheb");
+        let mut adding = input();
+        adding.custom_fields = vec![
+            CustomFieldInput {
+                name: "PIN".to_owned(),
+                value: Some("4821".to_owned()),
+                hidden: true,
+            },
+            CustomFieldInput {
+                name: "Branch".to_owned(),
+                value: Some("Habra".to_owned()),
+                hidden: false,
+            },
+        ];
+        apply(&mut entry, &adding).unwrap();
+        assert_eq!(entry.custom_fields.len(), 2);
+
+        let mut editing = input();
+        editing.custom_fields = vec![
+            CustomFieldInput {
+                name: "PIN".to_owned(),
+                value: None,
+                hidden: true,
+            },
+            CustomFieldInput {
+                name: "Branch".to_owned(),
+                value: Some("Kolkata".to_owned()),
+                hidden: false,
+            },
+        ];
+        apply(&mut entry, &editing).unwrap();
+
+        assert_eq!(
+            entry.custom_fields[0].value.expose(),
+            "4821",
+            "the editor never receives a hidden value, so sending nothing back has to mean \
+             keep it - anything else silently empties the field on the next unrelated edit"
+        );
+        assert_eq!(entry.custom_fields[1].value.expose(), "Kolkata");
+
+        let mut removing = input();
+        removing.custom_fields = vec![CustomFieldInput {
+            name: "Branch".to_owned(),
+            value: Some("Kolkata".to_owned()),
+            hidden: false,
+        }];
+        apply(&mut entry, &removing).unwrap();
+        assert_eq!(entry.custom_fields.len(), 1);
+        assert_eq!(entry.custom_fields[0].name, "Branch");
     }
 
     #[test]
