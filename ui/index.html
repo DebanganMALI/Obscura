@@ -300,6 +300,21 @@
     </div>
 
     <div class="section">
+      <p class="section__label">Backup</p>
+      <div class="card">
+        <p class="hint m-0">An export is every entry in one plain-text file - ids,
+          timestamps, tags, custom fields and two-factor secrets included. It is how you
+          move off Obscura, and how your entries survive a change to the vault format.
+          Importing adds entries; it never replaces one you already have.</p>
+        <div class="row-inline mt-20">
+          <button class="btn btn--ghost" type="button" id="s-export">Export entries</button>
+          <button class="btn btn--ghost" type="button" id="s-import">Import entries</button>
+        </div>
+        <p class="error" id="s-backup-error"></p>
+      </div>
+    </div>
+
+    <div class="section">
       <p class="section__label">Auto-lock</p>
       <div class="card">
         <div class="field m-0">
@@ -335,6 +350,27 @@
 
     <div class="modal__foot">
       <button class="btn btn--ghost" type="button" data-close="settings-scrim">Close</button>
+    </div>
+  </div>
+</div>
+
+<div class="scrim" id="ex-scrim" hidden>
+  <div class="modal modal--narrow" role="dialog" aria-modal="true" aria-labelledby="ex-title">
+    <h2 class="modal__title" id="ex-title">This file is not encrypted</h2>
+    <p class="serif-it lede">Everything the vault protects will be readable by anything that opens it.</p>
+
+    <p class="hint">Every password, note and two-factor secret is written in the clear.
+      Obscura restricts the file to your account where the system allows it, but that is
+      the only protection it has - no master password, no encryption.</p>
+    <p class="hint">Keep it somewhere you would keep the passwords themselves: an
+      encrypted volume, or a drive you can lock away. Delete it once you are done. Do not
+      leave it in Downloads and do not put it on a syncing cloud drive.</p>
+
+    <p class="error" id="ex-error"></p>
+
+    <div class="modal__foot">
+      <button class="btn btn--ghost" type="button" data-close="ex-scrim">Cancel</button>
+      <button class="btn btn--primary" type="button" id="ex-go">Choose a location</button>
     </div>
   </div>
 </div>

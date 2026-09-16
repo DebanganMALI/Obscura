@@ -45,6 +45,22 @@ pub struct EntryDetail {
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct ExportResult {
+    pub path: String,
+    pub entries: usize,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ImportResult {
+    pub path: String,
+    pub added: usize,
+    pub renumbered: usize,
+    pub info: VaultInfo,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CustomFieldView {
     pub name: String,
     pub value: Option<String>,
