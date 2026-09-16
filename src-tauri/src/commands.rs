@@ -5,6 +5,7 @@ use std::{path::PathBuf, time::Duration};
 
 use obscura_crypto::{kdf, KdfParams};
 use obscura_vault::{
+    csv_import,
     format::SlotKind,
     generator::{self, PasswordPolicy},
     portable, Credential, Entry, RecoveryCode, SecretString, Totp, Vault,
@@ -568,31 +569,56 @@ pub fn import_entries(
     app: tauri::AppHandle,
     state: State<'_, AppState>,
 ) -> Result<Option<ImportResult>, String> {
-    let Some(source) = app
+    let Some(chosen) = app
         .dialog()
         .file()
-        .set_title("Which export should Obscura read?")
-        .add_filter("Obscura export", &["json"])
+        .set_title("Which file should Obscura read?")
+        .add_filter("Export or CSV", &["json", "csv"])
         .blocking_pick_file()
         .and_then(|file| file.into_path().ok())
     else {
         return Ok(None);
     };
 
-    let doc = portable::read(&source).map_err(|e| e.to_string())?;
+    let bytes = Zeroizing::new(
+        std::fs::read(&chosen).map_err(|e| format!("cannot read {}: {e}", chosen.display()))?,
+    );
+    let (label, entries, notes) = read_import(&bytes)?;
     let secs = state.auto_lock().as_secs();
 
     state.with_session(|session| {
-        let report = session.vault.import(doc).map_err(|e| e.to_string())?;
+        let report = session
+            .vault
+            .import_all(entries)
+            .map_err(|e| e.to_string())?;
         let path = session.path.clone();
         persist(&app, session, &path)?;
         Ok(Some(ImportResult {
-            path: source.display().to_string(),
+            path: chosen.display().to_string(),
+            source: label,
             added: report.added,
             renumbered: report.renumbered,
+            skipped: notes.skipped_blank + notes.skipped_invalid,
+            totp_dropped: notes.totp_dropped,
             info: info(session, secs),
         }))
     })
+}
+
+fn read_import(bytes: &[u8]) -> Result<(String, Vec<Entry>, csv_import::CsvNotes), String> {
+    match portable::decode(bytes) {
+        Ok(doc) => Ok((
+            "an Obscura export".to_owned(),
+            doc.entries,
+            csv_import::CsvNotes::default(),
+        )),
+        Err(json_reason) => match csv_import::parse(bytes) {
+            Ok((source, entries, notes)) => Ok((format!("a {} export", source.label()), entries, notes)),
+            Err(csv_reason) => Err(format!(
+                "Obscura could not read that file. As an Obscura export: {json_reason}. As a CSV: {csv_reason}."
+            )),
+        },
+    }
 }
 
 #[tauri::command(async)]

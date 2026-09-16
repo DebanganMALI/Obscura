@@ -85,9 +85,13 @@ impl Vault {
     }
 
     pub fn import(&mut self, doc: Portable) -> Result<ImportReport, VaultError> {
+        self.import_all(doc.entries)
+    }
+
+    pub fn import_all(&mut self, entries: Vec<Entry>) -> Result<ImportReport, VaultError> {
         let mut report = ImportReport::default();
 
-        for mut entry in doc.entries {
+        for mut entry in entries {
             entry.validate()?;
             if self.get(entry.id).is_some() {
                 entry.id = Uuid::new_v4();
