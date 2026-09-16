@@ -226,3 +226,34 @@ mod tests {
         assert_eq!(aad.len(), PREFIX_LEN + header_bytes.len());
     }
 }
+
+#[cfg(test)]
+mod header_bounds {
+    use super::*;
+
+    fn file_claiming_header_len(len: u32) -> Vec<u8> {
+        let mut file = Vec::new();
+        file.extend_from_slice(MAGIC);
+        file.extend_from_slice(&FORMAT_VERSION.to_le_bytes());
+        file.extend_from_slice(&len.to_le_bytes());
+        file
+    }
+
+    #[test]
+    fn a_length_above_the_ceiling_is_refused_and_the_ceiling_itself_is_not() {
+        let over = decode_header(&file_claiming_header_len(MAX_HEADER_LEN + 1));
+        assert!(
+            matches!(
+                over,
+                Err(VaultError::Corrupt("the header length is implausible"))
+            ),
+            "a length past the ceiling was not refused as implausible"
+        );
+
+        let at = decode_header(&file_claiming_header_len(MAX_HEADER_LEN));
+        assert!(
+            matches!(at, Err(VaultError::Corrupt("the header is truncated"))),
+            "the ceiling itself was refused as implausible rather than read"
+        );
+    }
+}
