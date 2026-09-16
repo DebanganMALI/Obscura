@@ -166,3 +166,63 @@ pub fn entry_aad(vault_id: Uuid, entry_id: Uuid) -> Vec<u8> {
     aad.extend_from_slice(entry_id.as_bytes());
     aad
 }
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::indexing_slicing)]
+
+    use super::*;
+
+    const VAULT_ID: Uuid = Uuid::from_bytes([
+        0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e,
+        0x0f,
+    ]);
+
+    const ENTRY_ID: Uuid = Uuid::from_bytes([
+        0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e,
+        0x1f,
+    ]);
+
+    const SLOT_ID: Uuid = Uuid::from_bytes([
+        0x20, 0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27, 0x28, 0x29, 0x2a, 0x2b, 0x2c, 0x2d, 0x2e,
+        0x2f,
+    ]);
+
+    #[test]
+    fn the_entry_tag_is_a_domain_label_then_both_identifiers() {
+        let aad = entry_aad(VAULT_ID, ENTRY_ID);
+        assert_eq!(&aad[..17], &b"obscura/entry/v1/"[..]);
+        assert_eq!(&aad[17..33], &VAULT_ID.as_bytes()[..]);
+        assert_eq!(&aad[33..49], &ENTRY_ID.as_bytes()[..]);
+        assert_eq!(aad.len(), 49);
+    }
+
+    #[test]
+    fn the_slot_tag_is_a_domain_label_then_the_vault_and_slot_identifiers() {
+        let slot = KeySlot {
+            id: SLOT_ID,
+            kind: SlotKind::Password,
+            label: String::from("primary"),
+            wrapped_key: vec![0u8; 32],
+            public_key: None,
+            created_at: OffsetDateTime::UNIX_EPOCH,
+        };
+        let aad = slot.aad(VAULT_ID);
+        assert_eq!(&aad[..16], &b"obscura/slot/v1/"[..]);
+        assert_eq!(&aad[16..32], &VAULT_ID.as_bytes()[..]);
+        assert_eq!(&aad[32..48], &SLOT_ID.as_bytes()[..]);
+        assert_eq!(aad.len(), 48);
+    }
+
+    #[test]
+    fn the_body_tag_is_the_prefix_followed_by_the_encoded_header() {
+        let prefix: [u8; PREFIX_LEN] = [
+            b'O', b'B', b'S', b'C', b'U', b'R', b'A', 0, 1, 0, 9, 0, 0, 0,
+        ];
+        let header_bytes = [0xa1u8, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09];
+        let aad = body_aad(&prefix, &header_bytes);
+        assert_eq!(&aad[..PREFIX_LEN], &prefix[..]);
+        assert_eq!(&aad[PREFIX_LEN..], &header_bytes[..]);
+        assert_eq!(aad.len(), PREFIX_LEN + header_bytes.len());
+    }
+}
