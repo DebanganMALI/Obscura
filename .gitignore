@@ -17,3 +17,6 @@ build/
 Thumbs.db
 /packaging/out/
 probe/
+mutants.out/
+mutants.out.old/
+lcov.info
