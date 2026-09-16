@@ -27,6 +27,22 @@ use crate::{
     watermark,
 };
 
+pub const MIN_PASSWORD_LEN: usize = 8;
+
+fn unlock_failure(error: &obscura_vault::VaultError) -> UnlockError {
+    use obscura_vault::VaultError as E;
+    match error {
+        E::NoMatchingSlot => UnlockError::message("that password does not open this vault"),
+        E::BadMagic => UnlockError::message("that file is not an Obscura vault"),
+        E::UnsupportedVersion(v) => UnlockError::message(format!(
+            "that vault was written in format version {v}, which this build of Obscura cannot read"
+        )),
+        E::Corrupt(what) => UnlockError::message(format!("the vault file is damaged: {what}")),
+        E::Io(detail) => UnlockError::message(detail.clone()),
+        other => UnlockError::message(other.to_string()),
+    }
+}
+
 fn default_vault_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     let dir = app
         .path()
@@ -148,6 +164,11 @@ pub fn create_vault(
     let password = Zeroizing::new(password);
     let target = resolve(&app, path)?;
 
+    if password.len() < MIN_PASSWORD_LEN {
+        return Err(format!(
+            "the master password must be at least {MIN_PASSWORD_LEN} characters"
+        ));
+    }
     if target.exists() {
         return Err("a vault already exists at that location".to_owned());
     }
@@ -203,7 +224,7 @@ pub fn unlock(
     }
 
     let vault = Vault::open(&target, &Credential::Password(password.as_bytes()), None)
-        .map_err(|_| UnlockError::message("could not unlock the vault with that password"))?;
+        .map_err(|e| unlock_failure(&e))?;
     admit(&app, &vault, accept_revision)?;
     apply_remember(&app, &target, remember);
 
@@ -235,9 +256,11 @@ pub fn vault_info(state: State<'_, AppState>) -> Result<VaultInfo, String> {
 }
 
 #[tauri::command]
-pub fn set_auto_lock(state: State<'_, AppState>, seconds: u64) -> u64 {
+pub fn set_auto_lock(app: tauri::AppHandle, state: State<'_, AppState>, seconds: u64) -> u64 {
     state.set_auto_lock(Duration::from_secs(seconds));
-    state.auto_lock().as_secs()
+    let applied = state.auto_lock().as_secs();
+    let _ = location::remember_auto_lock(&app, applied);
+    applied
 }
 
 #[tauri::command]
@@ -422,17 +445,20 @@ pub fn change_master_password(
     let current = Zeroizing::new(current);
     let new = Zeroizing::new(new);
 
-    if new.len() < 8 {
-        return Err("the new password must be at least 8 characters".to_owned());
+    if new.len() < MIN_PASSWORD_LEN {
+        return Err(format!(
+            "the new password must be at least {MIN_PASSWORD_LEN} characters"
+        ));
     }
 
     state.with_session(|session| {
-        Vault::open(
-            &session.path,
-            &Credential::Password(current.as_bytes()),
-            None,
-        )
-        .map_err(|_| "the current password is not correct".to_owned())?;
+        if !session
+            .vault
+            .accepts(&Credential::Password(current.as_bytes()))
+            .map_err(|e| e.to_string())?
+        {
+            return Err("the current password is not correct".to_owned());
+        }
 
         session
             .vault

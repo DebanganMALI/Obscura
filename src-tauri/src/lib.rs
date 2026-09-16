@@ -58,7 +58,12 @@ pub fn run() {
             commands::hello_isolation_setup,
         ])
         .setup(|app| {
-            spawn_auto_lock_clock(app.handle().clone());
+            let handle = app.handle().clone();
+            if let Some(seconds) = location::remembered_auto_lock(&handle) {
+                app.state::<AppState>()
+                    .set_auto_lock(Duration::from_secs(seconds));
+            }
+            spawn_auto_lock_clock(handle);
             Ok(())
         })
         .run(tauri::generate_context!())
