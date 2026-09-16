@@ -690,3 +690,77 @@ fn a_recovery_code_can_be_confirmed_before_the_slot_is_ever_written() {
 
     std::fs::remove_dir_all(&dir).ok();
 }
+
+#[test]
+fn a_header_asking_for_unbounded_work_is_refused_before_any_is_done() {
+    let mut vault = seeded_vault();
+    let bytes = vault.to_bytes().unwrap();
+
+    let (mut header, _, _) = format::decode_header(&bytes).unwrap();
+    header.kdf.t_cost = u32::MAX;
+
+    let header_bytes = format::encode_header(&header).unwrap();
+    let prefix = format::encode_prefix(header_bytes.len()).unwrap();
+    let mut hostile = prefix;
+    hostile.extend_from_slice(&header_bytes);
+    hostile.extend_from_slice(&bytes[format::PREFIX_LEN..]);
+
+    let outcome = Vault::from_bytes(&hostile, &Credential::Password(PASSWORD), None);
+
+    assert!(
+        matches!(outcome, Err(VaultError::Crypto(_))),
+        "every Argon2 parameter is read out of the file, so the parameters have to be \
+         bounded before they are used - reaching the KDF at all would mean grinding \
+         through however many passes the file asked for"
+    );
+}
+
+#[test]
+fn a_mangled_prefix_is_always_an_error_and_never_a_panic() {
+    let mut vault = seeded_vault();
+    let bytes = vault.to_bytes().unwrap();
+
+    for index in 0..format::PREFIX_LEN {
+        for bit in 0..8u8 {
+            let mut corrupted = bytes.clone();
+            corrupted[index] ^= 1 << bit;
+            assert!(
+                Vault::from_bytes(&corrupted, &Credential::Password(PASSWORD), None).is_err(),
+                "flipping bit {bit} of prefix byte {index} was accepted"
+            );
+        }
+    }
+}
+
+#[test]
+fn every_truncation_of_a_vault_is_refused() {
+    let mut vault = seeded_vault();
+    let bytes = vault.to_bytes().unwrap();
+
+    for len in 0..bytes.len().min(512) {
+        assert!(
+            Vault::from_bytes(&bytes[..len], &Credential::Password(PASSWORD), None).is_err(),
+            "a vault truncated to {len} bytes was accepted"
+        );
+    }
+}
+
+#[test]
+fn a_header_length_that_overruns_the_file_is_refused() {
+    let mut vault = seeded_vault();
+    let bytes = vault.to_bytes().unwrap();
+
+    for claimed in [
+        u32::MAX,
+        format::MAX_HEADER_LEN,
+        format::MAX_HEADER_LEN - 1,
+        0,
+    ] {
+        let mut corrupted = bytes.clone();
+        corrupted[10..14].copy_from_slice(&claimed.to_le_bytes());
+        assert!(
+            Vault::from_bytes(&corrupted, &Credential::Password(PASSWORD), None).is_err(),
+            "a header claiming to be {claimed} bytes long was accepted"
+        );
+    }
+}

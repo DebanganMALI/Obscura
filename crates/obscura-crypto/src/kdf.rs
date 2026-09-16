@@ -10,6 +10,8 @@ pub const MAX_M_COST_KIB: u32 = 2 * 1024 * 1024;
 
 pub const MIN_T_COST: u32 = 2;
 
+pub const MAX_T_COST: u32 = 16;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct KdfParams {
     pub m_cost_kib: u32,
@@ -37,6 +39,9 @@ impl KdfParams {
         }
         if self.t_cost < MIN_T_COST {
             return Err(CryptoError::KdfParams("time cost below 2 passes"));
+        }
+        if self.t_cost > MAX_T_COST {
+            return Err(CryptoError::KdfParams("time cost above 16 passes"));
         }
         if self.p_cost == 0 || self.p_cost > 64 {
             return Err(CryptoError::KdfParams("parallelism outside 1..=64"));
