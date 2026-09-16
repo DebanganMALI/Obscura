@@ -49,13 +49,12 @@ pub fn run() {
             commands::totp_code,
             commands::generate,
             commands::change_master_password,
+            commands::set_master_password,
             commands::create_recovery_code,
             commands::confirm_recovery_code,
             commands::discard_recovery_code,
             commands::unlock_with_recovery,
             commands::remove_slot,
-            commands::hello_selftest,
-            commands::hello_isolation_setup,
         ])
         .setup(|app| {
             let handle = app.handle().clone();

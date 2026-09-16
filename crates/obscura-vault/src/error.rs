@@ -40,6 +40,12 @@ pub enum VaultError {
     #[error("could not unlock the vault with that credential")]
     NoMatchingSlot,
 
+    #[error("there is no entry with that id")]
+    NoSuchEntry,
+
+    #[error("this vault already has a master password: change it rather than adding another")]
+    PasswordSlotExists,
+
     #[error("vault rolled back: file is at revision {found}, expected at least {expected}")]
     Rollback { found: u64, expected: u64 },
 

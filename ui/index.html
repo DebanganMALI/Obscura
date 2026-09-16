@@ -276,10 +276,7 @@
           you lose with the computer.</p>
         <div class="row-inline mt-20">
           <button class="btn btn--ghost" type="button" id="s-add-recovery">Add recovery code</button>
-          <button class="btn btn--ghost" type="button" id="s-hello-test">Test Windows Hello</button>
-          <button class="btn btn--ghost" type="button" id="s-hello-scope">Test credential isolation</button>
         </div>
-        <pre class="probe" id="s-hello-out" hidden></pre>
         <p class="error" id="s-slots-error"></p>
       </div>
     </div>
@@ -331,14 +328,15 @@
     </div>
 
     <div class="section">
-      <p class="section__label">Master password</p>
+      <p class="section__label" id="s-password-label">Master password</p>
       <div class="card">
-        <div class="field">
+        <p class="hint m-0" id="s-password-hint"></p>
+        <div class="field" id="s-current-field">
           <label class="field__label" for="s-current">Current password</label>
           <input class="input input--mono" type="password" id="s-current" autocomplete="off">
         </div>
         <div class="field">
-          <label class="field__label" for="s-new">New password</label>
+          <label class="field__label" for="s-new" id="s-new-label">New password</label>
           <input class="input input--mono" type="password" id="s-new" autocomplete="new-password">
           <div class="meter" id="s-meter">
             <div class="meter__seg"></div><div class="meter__seg"></div>

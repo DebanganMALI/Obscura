@@ -92,6 +92,7 @@ fn info(session: &Session, auto_lock_secs: u64) -> VaultInfo {
             .collect(),
         path: session.path.display().to_string(),
         auto_lock_secs,
+        has_password: session.vault.has_password(),
     }
 }
 
@@ -432,6 +433,31 @@ pub fn generate(
     Ok(GeneratedPassword {
         password: password.to_string(),
         entropy_bits: policy.entropy_bits(),
+    })
+}
+
+#[tauri::command(async)]
+pub fn set_master_password(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    password: String,
+) -> Result<VaultInfo, String> {
+    let password = Zeroizing::new(password);
+    if password.len() < MIN_PASSWORD_LEN {
+        return Err(format!(
+            "the master password must be at least {MIN_PASSWORD_LEN} characters"
+        ));
+    }
+    let secs = state.auto_lock().as_secs();
+
+    state.with_session(|session| {
+        session
+            .vault
+            .add_password(password.as_bytes(), None)
+            .map_err(|e| e.to_string())?;
+        let path = session.path.clone();
+        persist(&app, session, &path)?;
+        Ok(info(session, secs))
     })
 }
 
@@ -800,57 +826,6 @@ pub fn remove_slot(
         persist(&app, session, &path)?;
         Ok(info(session, secs))
     })
-}
-
-#[tauri::command]
-pub fn hello_selftest() -> Result<String, String> {
-    use obscura_platform::hello;
-
-    const PROBE_ID: &str = "selftest-0000-0000-0000-000000000000";
-
-    let available = hello::is_available().map_err(|e| e.to_string())?;
-    if !available {
-        return Ok("Not available: this machine has no usable Windows Hello provider.".to_owned());
-    }
-
-    let enrolled = hello::enroll(PROBE_ID).map_err(|e| format!("Enrol failed: {e}"))?;
-    let reproduced = hello::unlock(PROBE_ID).map_err(|e| {
-        let _ = hello::forget(PROBE_ID);
-        format!("Unlock failed: {e}")
-    })?;
-
-    let matches = reproduced.expose() == enrolled.expose();
-    let _ = hello::forget(PROBE_ID);
-
-    if matches {
-        Ok(
-            "Windows Hello works: the signature is reproducible and the derived key matched."
-                .to_owned(),
-        )
-    } else {
-        Err("The derived key changed between enrolment and unlock, so hardware unlock cannot work on this machine.".to_owned())
-    }
-}
-
-#[tauri::command]
-pub fn hello_isolation_setup() -> Result<String, String> {
-    use obscura_platform::hello;
-
-    const ISOLATION_ID: &str = "isolation-0000-0000-0000-000000000000";
-
-    if !hello::is_available().map_err(|e| e.to_string())? {
-        return Ok("Not available: this machine has no usable Windows Hello provider.".to_owned());
-    }
-
-    hello::enroll(ISOLATION_ID).map_err(|e| format!("Enrol failed: {e}"))?;
-
-    let name = hello::credential_name(ISOLATION_ID);
-    let print = hello::public_fingerprint(ISOLATION_ID)
-        .map_err(|e| format!("The credential was created but could not be read back: {e}"))?;
-
-    Ok(format!(
-        "Test credential left in place.\n\nName: {name}\nPublic key: {print}\n\nNow run the scope probe from a terminal. If it prints the same fingerprint, a Hello credential is not private to the app that made it."
-    ))
 }
 
 #[cfg(test)]

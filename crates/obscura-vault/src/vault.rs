@@ -334,6 +334,46 @@ impl Vault {
         Ok(())
     }
 
+    pub fn add_password(
+        &mut self,
+        password: &[u8],
+        kdf_params: Option<KdfParams>,
+    ) -> Result<Uuid, VaultError> {
+        if self.has_password() {
+            return Err(VaultError::PasswordSlotExists);
+        }
+
+        let params = kdf_params.unwrap_or_else(|| KdfParams::from(self.header.kdf));
+        params.validate()?;
+
+        let salt = kdf::random_salt()?;
+        let kek = kdf::derive_key(password, &salt, params)?;
+
+        let mut slot = KeySlot {
+            id: Uuid::new_v4(),
+            kind: SlotKind::Password,
+            label: "Master password".to_owned(),
+            wrapped_key: Vec::new(),
+            public_key: None,
+            created_at: OffsetDateTime::now_utc(),
+        };
+        slot.wrapped_key = aead::seal(&kek, &slot.aad(self.header.vault_id), self.key.expose())?;
+
+        let id = slot.id;
+        self.header.slots.push(slot);
+        self.header.salt = salt;
+        self.header.kdf = StoredKdf::from(params);
+        Ok(id)
+    }
+
+    #[must_use]
+    pub fn has_password(&self) -> bool {
+        self.header
+            .slots
+            .iter()
+            .any(|slot| slot.kind == SlotKind::Password)
+    }
+
     #[must_use]
     pub const fn id(&self) -> Uuid {
         self.header.vault_id
@@ -400,7 +440,7 @@ impl Vault {
         let before = self.entries.len();
         self.entries.retain(|e| e.id != id);
         if self.entries.len() == before {
-            return Err(VaultError::NoMatchingSlot);
+            return Err(VaultError::NoSuchEntry);
         }
         Ok(())
     }

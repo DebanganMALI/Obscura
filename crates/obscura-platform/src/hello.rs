@@ -120,7 +120,7 @@ mod imp {
         }
         let name = HSTRING::from(credential_name(vault_id));
 
-        let mut result = KeyCredentialManager::RequestCreateAsync(
+        let result = KeyCredentialManager::RequestCreateAsync(
             &name,
             KeyCredentialCreationOption::FailIfExists,
         )
@@ -129,14 +129,7 @@ mod imp {
         .map_err(win)?;
 
         if result.Status().map_err(win)? == KeyCredentialStatus::CredentialAlreadyExists {
-            delete(&name);
-            result = KeyCredentialManager::RequestCreateAsync(
-                &name,
-                KeyCredentialCreationOption::FailIfExists,
-            )
-            .map_err(win)?
-            .get()
-            .map_err(win)?;
+            return Err(PlatformError::CredentialExists);
         }
 
         let status = result.Status().map_err(win)?;

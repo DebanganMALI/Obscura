@@ -764,3 +764,57 @@ fn a_header_length_that_overruns_the_file_is_refused() {
         );
     }
 }
+
+#[test]
+fn a_password_can_be_set_again_after_it_has_been_removed() {
+    let mut vault = seeded_vault();
+    let (_, code) = vault.add_recovery_slot("Recovery code").unwrap();
+
+    let password_slot = vault
+        .slots()
+        .iter()
+        .find(|slot| slot.kind == SlotKind::Password)
+        .unwrap()
+        .id;
+    vault.remove_slot(password_slot).unwrap();
+    assert!(!vault.has_password());
+    assert!(!vault.accepts(&Credential::Password(PASSWORD)).unwrap());
+
+    assert_eq!(
+        vault
+            .change_password(b"a brand new password", None)
+            .unwrap_err(),
+        VaultError::NoMatchingSlot,
+        "there is nothing to change - the vault has no password slot to rewrap"
+    );
+
+    vault.add_password(b"a brand new password", None).unwrap();
+
+    assert!(vault.has_password());
+    assert!(vault
+        .accepts(&Credential::Password(b"a brand new password"))
+        .unwrap());
+    assert!(
+        vault
+            .accepts(&Credential::Identity(&code.identity()))
+            .unwrap(),
+        "setting a password must not disturb the recovery code that was the only way in"
+    );
+
+    assert_eq!(
+        vault.add_password(b"a third password", None).unwrap_err(),
+        VaultError::PasswordSlotExists,
+        "one salt lives in the header, so a second password slot could never be opened"
+    );
+}
+
+#[test]
+fn removing_an_entry_that_is_not_there_says_so() {
+    let mut vault = seeded_vault();
+    assert_eq!(
+        vault.remove(uuid::Uuid::new_v4()).unwrap_err(),
+        VaultError::NoSuchEntry,
+        "reporting a missing entry as a missing unlock slot sends the reader to the wrong \
+         part of the vault entirely"
+    );
+}
