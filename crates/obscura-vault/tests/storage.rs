@@ -818,3 +818,28 @@ fn removing_an_entry_that_is_not_there_says_so() {
          part of the vault entirely"
     );
 }
+
+#[test]
+fn a_header_edit_that_still_parses_is_caught_by_the_body_tag() {
+    let mut vault = seeded_vault();
+    let bytes = vault.to_bytes().unwrap();
+    let (header, header_bytes, body_start) = format::decode_header(&bytes).unwrap();
+
+    let mut edited = header.clone();
+    edited.revision ^= 1;
+    let edited_bytes = format::encode_header(&edited).unwrap();
+    assert_eq!(
+        edited_bytes.len(),
+        header_bytes.len(),
+        "the edit changed the encoded length, so this test no longer isolates the tag"
+    );
+
+    let mut file = format::encode_prefix(edited_bytes.len()).unwrap();
+    file.extend_from_slice(&edited_bytes);
+    file.extend_from_slice(&bytes[body_start..]);
+
+    assert!(
+        Vault::from_bytes(&file, &Credential::Password(PASSWORD), None).is_err(),
+        "a header edit that parsed cleanly was accepted"
+    );
+}
