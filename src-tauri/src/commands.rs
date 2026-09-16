@@ -7,7 +7,7 @@ use obscura_crypto::{kdf, KdfParams};
 use obscura_vault::{
     format::SlotKind,
     generator::{self, PasswordPolicy},
-    Credential, Entry, RecoveryCode, SecretString, Totp, Vault,
+    portable, Credential, Entry, RecoveryCode, SecretString, Totp, Vault,
 };
 use tauri::{Manager, State};
 use tauri_plugin_dialog::DialogExt;
@@ -17,9 +17,9 @@ use zeroize::Zeroizing;
 use crate::{
     clipboard,
     dto::{
-        CustomFieldView, EntryDetail, EntryInput, EntrySummary, GeneratedPassword,
-        IssuedRecoveryCode, LocationProbe, RelocateResult, SlotView, TotpCode, UnlockError,
-        VaultInfo,
+        CustomFieldView, EntryDetail, EntryInput, EntrySummary, ExportResult, GeneratedPassword,
+        ImportResult, IssuedRecoveryCode, LocationProbe, RelocateResult, SlotView, TotpCode,
+        UnlockError, VaultInfo,
     },
     location,
     state::{AppState, Session},
@@ -534,6 +534,65 @@ pub fn pick_existing_vault(app: tauri::AppHandle) -> Result<Option<String>, Stri
     Ok(chosen
         .and_then(|file| file.into_path().ok())
         .map(|p| p.display().to_string()))
+}
+
+#[tauri::command(async)]
+pub fn export_entries(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+) -> Result<Option<ExportResult>, String> {
+    let today = time::OffsetDateTime::now_utc().date();
+    let Some(target) = app
+        .dialog()
+        .file()
+        .set_title("Where should the plain-text export go?")
+        .add_filter("Obscura export", &["json"])
+        .set_file_name(format!("obscura-export-{today}.json"))
+        .blocking_save_file()
+        .and_then(|file| file.into_path().ok())
+    else {
+        return Ok(None);
+    };
+
+    let doc = state.with_session(|session| Ok(session.vault.export()))?;
+    portable::write(&target, &doc).map_err(|e| e.to_string())?;
+
+    Ok(Some(ExportResult {
+        path: target.display().to_string(),
+        entries: doc.entries.len(),
+    }))
+}
+
+#[tauri::command(async)]
+pub fn import_entries(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+) -> Result<Option<ImportResult>, String> {
+    let Some(source) = app
+        .dialog()
+        .file()
+        .set_title("Which export should Obscura read?")
+        .add_filter("Obscura export", &["json"])
+        .blocking_pick_file()
+        .and_then(|file| file.into_path().ok())
+    else {
+        return Ok(None);
+    };
+
+    let doc = portable::read(&source).map_err(|e| e.to_string())?;
+    let secs = state.auto_lock().as_secs();
+
+    state.with_session(|session| {
+        let report = session.vault.import(doc).map_err(|e| e.to_string())?;
+        let path = session.path.clone();
+        persist(&app, session, &path)?;
+        Ok(Some(ImportResult {
+            path: source.display().to_string(),
+            added: report.added,
+            renumbered: report.renumbered,
+            info: info(session, secs),
+        }))
+    })
 }
 
 #[tauri::command(async)]

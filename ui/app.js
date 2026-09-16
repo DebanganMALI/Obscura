@@ -902,6 +902,51 @@ $("s-add-recovery").addEventListener("click", async () => {
   await openRecovery(false);
 });
 
+$("s-export").addEventListener("click", () => {
+  $("ex-error").textContent = "";
+  $("ex-scrim").hidden = false;
+});
+
+$("ex-go").addEventListener("click", async () => {
+  const error = $("ex-error");
+  const button = $("ex-go");
+  error.textContent = "";
+  button.disabled = true;
+  try {
+    const result = await invoke("export_entries");
+    if (!result) return;
+    $("ex-scrim").hidden = true;
+    toast(result.entries + " entries written to " + result.path, "warn");
+  } catch (err) {
+    error.textContent = errText(err);
+  } finally {
+    button.disabled = false;
+  }
+});
+
+$("s-import").addEventListener("click", async () => {
+  const error = $("s-backup-error");
+  const button = $("s-import");
+  error.textContent = "";
+  button.disabled = true;
+  try {
+    const result = await invoke("import_entries");
+    if (!result) return;
+    state.info = result.info;
+    $("s-count").textContent = String(result.info.entryCount);
+    $("s-revision").textContent = String(result.info.revision);
+    const renumbered = result.renumbered
+      ? " - " + result.renumbered + " had an id already in use and were given a new one"
+      : "";
+    toast("Added " + result.added + " entries" + renumbered);
+    await refresh();
+  } catch (err) {
+    error.textContent = errText(err);
+  } finally {
+    button.disabled = false;
+  }
+});
+
 $("s-move").addEventListener("click", async () => {
   const error = $("s-loc-error");
   error.textContent = "";
