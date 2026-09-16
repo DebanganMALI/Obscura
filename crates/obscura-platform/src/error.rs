@@ -13,6 +13,9 @@ pub enum PlatformError {
     #[error("the hardware credential for this vault no longer exists")]
     CredentialMissing,
 
+    #[error("a hardware credential for this vault already exists - remove it deliberately before enrolling again")]
+    CredentialExists,
+
     #[error("the security device is locked")]
     DeviceLocked,
 

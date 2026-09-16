@@ -94,6 +94,7 @@ pub struct VaultInfo {
     pub slots: Vec<SlotView>,
     pub path: String,
     pub auto_lock_secs: u64,
+    pub has_password: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]

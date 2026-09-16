@@ -344,8 +344,6 @@ function wipe() {
   $("gen-out").textContent = "\u00a0";
   $("gen-bits").textContent = "0";
   $("rc-code").textContent = "\u00a0";
-  $("s-hello-out").textContent = "";
-  $("s-hello-out").hidden = true;
 
   document.querySelectorAll("#app input, #app textarea, .scrim input, .scrim textarea")
     .forEach((field) => {
@@ -789,6 +787,7 @@ async function openSettings() {
   $("s-current").value = "";
   $("s-new").value = "";
   paintMeter($("s-meter"), 0);
+  paintPasswordSection(info.hasPassword);
   $("s-loc-error").textContent = "";
   try {
     const remembered = await invoke("remembered_location");
@@ -861,41 +860,6 @@ async function removeSlot(slot) {
     error.textContent = String(err);
   }
 }
-
-$("s-hello-test").addEventListener("click", async () => {
-  const error = $("s-slots-error");
-  error.textContent = "";
-  const button = $("s-hello-test");
-  button.disabled = true;
-  button.textContent = "Prompting...";
-  try {
-    toast(await invoke("hello_selftest"));
-  } catch (err) {
-    error.textContent = String(err);
-  } finally {
-    button.disabled = false;
-    button.textContent = "Test Windows Hello";
-  }
-});
-
-$("s-hello-scope").addEventListener("click", async () => {
-  const error = $("s-slots-error");
-  const out = $("s-hello-out");
-  error.textContent = "";
-  const button = $("s-hello-scope");
-  button.disabled = true;
-  button.textContent = "Prompting...";
-  try {
-    out.textContent = await invoke("hello_isolation_setup");
-    out.hidden = false;
-  } catch (err) {
-    out.hidden = true;
-    error.textContent = String(err);
-  } finally {
-    button.disabled = false;
-    button.textContent = "Test credential isolation";
-  }
-});
 
 $("s-add-recovery").addEventListener("click", async () => {
   $("s-slots-error").textContent = "";
@@ -996,21 +960,37 @@ $("s-autolock").addEventListener("input", async () => {
   await invoke("set_auto_lock", { seconds: Number($("s-autolock").value) * 60 });
 });
 
+function paintPasswordSection(hasPassword) {
+  $("s-current-field").hidden = !hasPassword;
+  $("s-password-label").textContent = hasPassword ? "Master password" : "No master password";
+  $("s-password-hint").textContent = hasPassword
+    ? ""
+    : "This vault opens with a recovery code only. Setting a master password gives you a second way in, and keeps the code as a spare.";
+  $("s-new-label").textContent = hasPassword ? "New password" : "Master password";
+  $("s-change").textContent = hasPassword ? "Change password" : "Set a master password";
+}
+
 $("s-new").addEventListener("input", (e) => paintMeter($("s-meter"), strength(e.target.value)));
 
 $("s-change").addEventListener("click", async () => {
   const error = $("s-error");
   error.textContent = "";
+  const adding = !(state.info && state.info.hasPassword);
   try {
-    await invoke("change_master_password", {
-      current: $("s-current").value,
-      new: $("s-new").value,
-    });
+    if (adding) {
+      state.info = await invoke("set_master_password", { password: $("s-new").value });
+    } else {
+      await invoke("change_master_password", {
+        current: $("s-current").value,
+        new: $("s-new").value,
+      });
+    }
     $("s-current").value = "";
     $("s-new").value = "";
     paintMeter($("s-meter"), 0);
-    toast("Master password changed");
+    toast(adding ? "Master password set" : "Master password changed");
     await refresh();
+    if (state.info) paintPasswordSection(state.info.hasPassword);
   } catch (err) {
     error.textContent = String(err);
   }
