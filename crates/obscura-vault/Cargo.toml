@@ -24,6 +24,7 @@ sha2           = { workspace = true }
 rand_core      = { workspace = true }
 thiserror      = { workspace = true }
 ciborium       = { workspace = true }
+serde_json     = { workspace = true }
 
 [dev-dependencies]
 uuid           = { workspace = true }

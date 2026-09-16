@@ -35,7 +35,7 @@ fn watermark_data(vault_id: Uuid, revision: u64) -> Vec<u8> {
 const OWNER_ONLY: u32 = 0o600;
 
 #[cfg(unix)]
-fn restrict(path: &Path) -> Result<(), VaultError> {
+pub(crate) fn restrict_to_owner(path: &Path) -> Result<(), VaultError> {
     use std::os::unix::fs::PermissionsExt as _;
     fs::set_permissions(path, fs::Permissions::from_mode(OWNER_ONLY)).map_err(|e| {
         VaultError::Io(format!(
@@ -47,7 +47,7 @@ fn restrict(path: &Path) -> Result<(), VaultError> {
 
 #[cfg(not(unix))]
 #[allow(clippy::unnecessary_wraps)]
-fn restrict(_path: &Path) -> Result<(), VaultError> {
+pub(crate) fn restrict_to_owner(_path: &Path) -> Result<(), VaultError> {
     Ok(())
 }
 
@@ -229,7 +229,7 @@ impl Vault {
             let backup = backup_path(path);
             fs::copy(path, &backup)
                 .map_err(|e| VaultError::Io(format!("cannot write backup: {e}")))?;
-            restrict(&backup)?;
+            restrict_to_owner(&backup)?;
         }
 
         fs::rename(&temp, path)

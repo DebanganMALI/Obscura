@@ -34,6 +34,9 @@ pub enum VaultError {
     #[error("the vault file is corrupt: {0}")]
     Corrupt(&'static str),
 
+    #[error("that file is not an Obscura export: {0}")]
+    NotAnExport(&'static str),
+
     #[error("could not unlock the vault with that credential")]
     NoMatchingSlot,
 
