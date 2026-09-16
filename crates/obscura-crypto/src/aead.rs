@@ -63,3 +63,36 @@ pub fn open(key: &SecretKey, aad: &[u8], sealed: &[u8]) -> Result<Zeroizing<Vec<
         .map(Zeroizing::new)
         .map_err(|_| CryptoError::Authentication)
 }
+
+#[cfg(test)]
+mod tests {
+    #![allow(
+        clippy::indexing_slicing,
+        clippy::unwrap_used,
+        clippy::expect_used,
+        clippy::panic
+    )]
+
+    use super::*;
+
+    #[test]
+    fn a_sealed_message_costs_exactly_the_stated_overhead() {
+        let key = SecretKey::zeroed();
+        let plaintext = b"a message of some length";
+        let sealed = seal(&key, b"tag", plaintext).expect("sealing");
+        assert_eq!(sealed.len(), plaintext.len() + OVERHEAD);
+        assert_eq!(OVERHEAD, 40);
+    }
+
+    #[test]
+    fn an_empty_message_seals_to_exactly_the_overhead_and_still_opens() {
+        let key = SecretKey::zeroed();
+        let sealed = seal(&key, b"tag", b"").expect("sealing");
+        assert_eq!(sealed.len(), OVERHEAD);
+
+        let opened = open(&key, b"tag", &sealed).expect("opening a sealed empty message");
+        assert!(opened.is_empty());
+
+        assert!(open(&key, b"tag", &sealed[..OVERHEAD - 1]).is_err());
+    }
+}
