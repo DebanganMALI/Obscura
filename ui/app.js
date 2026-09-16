@@ -935,10 +935,21 @@ $("s-import").addEventListener("click", async () => {
     state.info = result.info;
     $("s-count").textContent = String(result.info.entryCount);
     $("s-revision").textContent = String(result.info.revision);
-    const renumbered = result.renumbered
-      ? " - " + result.renumbered + " had an id already in use and were given a new one"
-      : "";
-    toast("Added " + result.added + " entries" + renumbered);
+    const many = (n, one, more) => n + " " + (n === 1 ? one : more);
+    const asides = [];
+    if (result.renumbered) {
+      asides.push(many(result.renumbered, "was given a new id", "were given a new id"));
+    }
+    if (result.skipped) {
+      asides.push(many(result.skipped, "row was skipped", "rows were skipped"));
+    }
+    if (result.totpDropped) {
+      asides.push(many(result.totpDropped,
+        "two-factor secret could not be read", "two-factor secrets could not be read"));
+    }
+    const tail = asides.length ? " - " + asides.join(", ") : "";
+    toast("Added " + many(result.added, "entry", "entries") + " from " + result.source + tail,
+      result.totpDropped || result.skipped ? "warn" : undefined);
     await refresh();
   } catch (err) {
     error.textContent = errText(err);

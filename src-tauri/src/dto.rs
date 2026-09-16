@@ -54,8 +54,11 @@ pub struct ExportResult {
 #[serde(rename_all = "camelCase")]
 pub struct ImportResult {
     pub path: String,
+    pub source: String,
     pub added: usize,
     pub renumbered: usize,
+    pub skipped: usize,
+    pub totp_dropped: usize,
     pub info: VaultInfo,
 }
 

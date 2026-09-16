@@ -1,5 +1,6 @@
 #![forbid(unsafe_code)]
 
+pub mod csv_import;
 pub mod entry;
 pub mod error;
 pub mod format;
@@ -10,6 +11,7 @@ pub mod secret;
 pub mod totp;
 pub mod vault;
 
+pub use csv_import::{CsvNotes, Source as CsvSource};
 pub use entry::{CustomField, Entry, EntryKind};
 pub use error::VaultError;
 pub use format::{KeySlot, SlotKind, VaultHeader};

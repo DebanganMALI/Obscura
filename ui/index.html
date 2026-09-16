@@ -304,8 +304,10 @@
       <div class="card">
         <p class="hint m-0">An export is every entry in one plain-text file - ids,
           timestamps, tags, custom fields and two-factor secrets included. It is how you
-          move off Obscura, and how your entries survive a change to the vault format.
-          Importing adds entries; it never replaces one you already have.</p>
+          move off Obscura, and how your entries survive a change to the vault format.</p>
+        <p class="hint">Import reads an Obscura export, or a CSV from Bitwarden, Chrome,
+          Edge or Firefox. It adds entries and never replaces one you already have, so
+          importing the same file twice gives you two copies.</p>
         <div class="row-inline mt-20">
           <button class="btn btn--ghost" type="button" id="s-export">Export entries</button>
           <button class="btn btn--ghost" type="button" id="s-import">Import entries</button>
