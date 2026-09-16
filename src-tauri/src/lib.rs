@@ -42,6 +42,7 @@ pub fn run() {
             commands::list_entries,
             commands::get_entry,
             commands::reveal_password,
+            commands::reveal_field,
             commands::copy_password,
             commands::copy_text,
             commands::save_entry,
