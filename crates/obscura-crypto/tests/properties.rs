@@ -310,3 +310,24 @@ fn slice_conversion_checks_length() {
     assert!(SecretKey::try_from_slice(&[0u8; 31], "key").is_err());
     assert!(SecretKey::try_from_slice(&[0u8; 33], "key").is_err());
 }
+
+#[test]
+fn a_time_cost_read_from_a_file_cannot_run_forever() {
+    let sane = kdf::KdfParams {
+        m_cost_kib: kdf::MIN_M_COST_KIB,
+        t_cost: kdf::MAX_T_COST,
+        p_cost: 1,
+    };
+    assert!(sane.validate().is_ok(), "the cap itself must be usable");
+
+    for t_cost in [kdf::MAX_T_COST + 1, 1_000, u32::MAX] {
+        let hostile = kdf::KdfParams { t_cost, ..sane };
+        assert_eq!(
+            hostile.validate().unwrap_err(),
+            CryptoError::KdfParams("time cost above 16 passes"),
+            "every KDF parameter comes out of the vault header, so an unbounded time cost is \
+             an unbounded amount of work the machine will do before it can tell you the file \
+             is not worth opening"
+        );
+    }
+}
