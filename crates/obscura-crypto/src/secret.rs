@@ -77,3 +77,16 @@ impl<const N: usize> core::fmt::Debug for SecretBytes<N> {
 }
 
 pub type SecretKey = SecretBytes<KEY_LEN>;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_secret_reports_the_size_it_was_given() {
+        assert_eq!(SecretBytes::<32>::zeroed().len(), 32);
+        assert!(!SecretBytes::<32>::zeroed().is_empty());
+        assert_eq!(SecretBytes::<0>::zeroed().len(), 0);
+        assert!(SecretBytes::<0>::zeroed().is_empty());
+    }
+}
