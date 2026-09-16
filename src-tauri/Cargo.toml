@@ -35,4 +35,3 @@ uuid             = { workspace = true }
 time             = { workspace = true }
 zeroize          = { workspace = true }
 subtle           = { workspace = true }
-thiserror        = { workspace = true }

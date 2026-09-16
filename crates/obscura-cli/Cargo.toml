@@ -16,6 +16,4 @@ path = "src/main.rs"
 workspace = true
 
 [dependencies]
-obscura-crypto = { workspace = true }
-obscura-vault  = { workspace = true }
 anyhow         = { workspace = true }
