@@ -2540,7 +2540,6 @@ dependencies = [
  "tauri",
  "tauri-build",
  "tauri-plugin-dialog",
- "thiserror 2.0.20",
  "time",
  "uuid",
  "zeroize",
@@ -2551,8 +2550,6 @@ name = "obscura-cli"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "obscura-crypto",
- "obscura-vault",
 ]
 
 [[package]]
@@ -2579,7 +2576,6 @@ dependencies = [
  "obscura-crypto",
  "thiserror 2.0.20",
  "windows",
- "zeroize",
 ]
 
 [[package]]
