@@ -248,3 +248,32 @@ impl core::fmt::Debug for HybridCiphertext {
         f.write_str("HybridCiphertext")
     }
 }
+
+#[cfg(test)]
+mod wrapped_key_bounds {
+    use super::*;
+
+    fn identity() -> HybridSecretKey {
+        HybridSecretKey::from_seed(SecretBytes::zeroed())
+    }
+
+    #[test]
+    fn a_buffer_one_byte_short_of_the_minimum_is_refused_on_length() {
+        let wrapped = vec![0u8; CIPHERTEXT_LEN + aead::OVERHEAD - 1];
+        let result = unwrap_key(&identity(), &wrapped, b"tag");
+        assert!(
+            matches!(result, Err(CryptoError::Malformed("wrapped key"))),
+            "a buffer below the minimum was not refused on length"
+        );
+    }
+
+    #[test]
+    fn a_buffer_at_the_minimum_gets_past_the_length_check() {
+        let wrapped = vec![0u8; CIPHERTEXT_LEN + aead::OVERHEAD];
+        let result = unwrap_key(&identity(), &wrapped, b"tag");
+        assert!(
+            !matches!(result, Err(CryptoError::Malformed("wrapped key"))),
+            "a buffer at the minimum was refused on length"
+        );
+    }
+}
