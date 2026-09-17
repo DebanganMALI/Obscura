@@ -206,6 +206,18 @@ pub fn passphrase_entropy_bits(wordlist_len: usize, words: usize) -> f64 {
     }
 }
 
+const fn rejection_limit(n: u32) -> u32 {
+    (u32::MAX / n) * n
+}
+
+const fn reduce(value: u32, n: u32) -> Option<usize> {
+    if value < rejection_limit(n) {
+        Some((value % n) as usize)
+    } else {
+        None
+    }
+}
+
 fn uniform_below(n: usize) -> Result<usize, VaultError> {
     use obscura_crypto::CryptoError;
     use rand_core::{OsRng, TryRngCore};
@@ -215,16 +227,151 @@ fn uniform_below(n: usize) -> Result<usize, VaultError> {
         return Err(VaultError::Policy("range is empty"));
     }
 
-    let limit = (u32::MAX / n_u32) * n_u32;
-
     loop {
         let mut bytes = [0u8; 4];
         OsRng
             .try_fill_bytes(&mut bytes)
             .map_err(|_| VaultError::Crypto(CryptoError::Rng))?;
-        let value = u32::from_le_bytes(bytes);
-        if value < limit {
-            return Ok((value % n_u32) as usize);
+        if let Some(index) = reduce(u32::from_le_bytes(bytes), n_u32) {
+            return Ok(index);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn all_classes(length: usize) -> PasswordPolicy {
+        PasswordPolicy {
+            length,
+            lowercase: true,
+            uppercase: true,
+            digits: true,
+            symbols: true,
+            exclude_ambiguous: false,
+            require_each_class: true,
+        }
+    }
+
+    fn no_classes() -> PasswordPolicy {
+        PasswordPolicy {
+            length: 20,
+            lowercase: false,
+            uppercase: false,
+            digits: false,
+            symbols: false,
+            exclude_ambiguous: false,
+            require_each_class: false,
+        }
+    }
+
+    #[test]
+    fn entropy_is_zero_when_there_is_nothing_to_choose_from() {
+        assert!(no_classes().entropy_bits().abs() < f64::EPSILON);
+        assert!(all_classes(0).entropy_bits().abs() < f64::EPSILON);
+        assert!(passphrase_entropy_bits(0, 5).abs() < f64::EPSILON);
+        assert!(passphrase_entropy_bits(1, 5).abs() < f64::EPSILON);
+        assert!(passphrase_entropy_bits(5, 0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn a_policy_with_no_character_classes_is_refused() {
+        assert!(matches!(
+            no_classes().validate(),
+            Err(VaultError::Policy(
+                "at least one character class is required"
+            ))
+        ));
+    }
+
+    #[test]
+    fn the_length_bounds_are_accepted_at_their_edges_and_not_past_them() {
+        assert!(all_classes(1024).validate().is_ok());
+        assert!(matches!(
+            all_classes(1025).validate(),
+            Err(VaultError::Policy("length must be at most 1024"))
+        ));
+        assert!(matches!(
+            all_classes(0).validate(),
+            Err(VaultError::Policy("length must be at least 1"))
+        ));
+    }
+
+    #[test]
+    fn a_password_must_be_long_enough_to_hold_one_of_every_required_class() {
+        assert!(all_classes(4).validate().is_ok());
+        assert!(matches!(
+            all_classes(3).validate(),
+            Err(VaultError::Policy(
+                "length is shorter than the number of required classes"
+            ))
+        ));
+    }
+
+    #[test]
+    fn every_class_keeps_at_least_two_members_after_the_ambiguous_filter() {
+        for (lowercase, uppercase, digits, symbols) in [
+            (true, false, false, false),
+            (false, true, false, false),
+            (false, false, true, false),
+            (false, false, false, true),
+        ] {
+            for exclude_ambiguous in [false, true] {
+                let policy = PasswordPolicy {
+                    length: 20,
+                    lowercase,
+                    uppercase,
+                    digits,
+                    symbols,
+                    exclude_ambiguous,
+                    require_each_class: false,
+                };
+                assert!(policy.charset().len() >= 2);
+            }
+        }
+    }
+
+    #[test]
+    fn a_passphrase_needs_two_words_to_choose_from_and_at_most_sixty_four_words() {
+        let list = ["alpha", "bravo"];
+        assert!(generate_passphrase(&list, 1, Separator::Hyphen, false).is_ok());
+        assert!(generate_passphrase(&list, 64, Separator::Hyphen, false).is_ok());
+        assert!(matches!(
+            generate_passphrase(&list, 65, Separator::Hyphen, false),
+            Err(VaultError::Policy("word count must be between 1 and 64"))
+        ));
+        assert!(matches!(
+            generate_passphrase(&list, 0, Separator::Hyphen, false),
+            Err(VaultError::Policy("word count must be between 1 and 64"))
+        ));
+        assert!(matches!(
+            generate_passphrase(&["only"], 4, Separator::Hyphen, false),
+            Err(VaultError::Policy("the wordlist needs at least two words"))
+        ));
+    }
+
+    #[test]
+    fn the_rejection_limit_is_the_largest_whole_multiple_that_fits() {
+        for n in [2u32, 3, 8, 26, 90, 1000, 65_536] {
+            let limit = rejection_limit(n);
+            assert_eq!(limit % n, 0, "the limit for {n} is not a whole multiple");
+            assert!(
+                limit > u32::MAX - n,
+                "the limit for {n} discards more than one multiple"
+            );
+        }
+    }
+
+    #[test]
+    fn a_value_at_or_above_the_limit_is_rejected_rather_than_folded() {
+        let n = 26u32;
+        let limit = rejection_limit(n);
+        assert_eq!(reduce(limit, n), None);
+        assert_eq!(reduce(u32::MAX, n), None);
+        assert_eq!(reduce(limit - 1, n), Some(25));
+        assert_eq!(reduce(0, n), Some(0));
+        assert_eq!(reduce(n, n), Some(0));
+        assert_eq!(reduce(n - 1, n), Some(25));
     }
 }
