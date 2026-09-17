@@ -11,6 +11,8 @@ const AMBIGUOUS: &[u8] = b"0O1lI|";
 
 const MAX_ATTEMPTS: usize = 4096;
 
+const MAX_SAMPLE_ATTEMPTS: usize = 64;
+
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct PasswordPolicy {
@@ -227,7 +229,7 @@ fn uniform_below(n: usize) -> Result<usize, VaultError> {
         return Err(VaultError::Policy("range is empty"));
     }
 
-    loop {
+    for _ in 0..MAX_SAMPLE_ATTEMPTS {
         let mut bytes = [0u8; 4];
         OsRng
             .try_fill_bytes(&mut bytes)
@@ -236,6 +238,10 @@ fn uniform_below(n: usize) -> Result<usize, VaultError> {
             return Ok(index);
         }
     }
+
+    Err(VaultError::Policy(
+        "the random source did not produce a usable value",
+    ))
 }
 
 #[cfg(test)]
