@@ -500,18 +500,20 @@ pub fn delete_entry(
     })
 }
 
+fn totp_for(session: &Session, id: Uuid) -> Result<TotpCode, String> {
+    let entry = session.vault.get(id).ok_or("no such entry")?;
+    let totp = entry.totp.as_ref().ok_or("this entry has no TOTP")?;
+    let (code, remaining) = totp.current().map_err(|e| e.to_string())?;
+    Ok(TotpCode {
+        code,
+        remaining,
+        period: totp.period(),
+    })
+}
+
 #[tauri::command]
 pub fn totp_code(state: State<'_, AppState>, id: Uuid) -> Result<TotpCode, String> {
-    state.with_session(|session| {
-        let entry = session.vault.get(id).ok_or("no such entry")?;
-        let totp = entry.totp.as_ref().ok_or("this entry has no TOTP")?;
-        let (code, remaining) = totp.current().map_err(|e| e.to_string())?;
-        Ok(TotpCode {
-            code,
-            remaining,
-            period: totp.period(),
-        })
-    })
+    state.with_session(|session| totp_for(session, id))
 }
 
 #[tauri::command]
@@ -1967,5 +1969,79 @@ mod slot_kinds {
              this word, so it cannot be the derived Debug spelling - a variant named in \
              two words would reach the interface run together and match nothing"
         );
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod two_factor {
+    use super::*;
+
+    const FAST: KdfParams = KdfParams {
+        m_cost_kib: 64 * 1024,
+        t_cost: 2,
+        p_cost: 1,
+    };
+
+    const URI: &str = "otpauth://totp/GitHub:saheb?secret=JBSWY3DPEHPK3PXP&issuer=GitHub";
+
+    fn a_session() -> (Session, Uuid, Uuid) {
+        let mut vault = Vault::create(b"correct horse battery staple", FAST).unwrap();
+
+        let mut carrying = Entry::new_login("GitHub", "saheb");
+        carrying.totp = Some(Totp::from_uri(URI).unwrap());
+        let carrying = vault.add(carrying).unwrap();
+
+        let bare = vault.add(Entry::new_login("Fastmail", "saheb")).unwrap();
+
+        (
+            Session::new(vault, PathBuf::from("vault.obscura")),
+            carrying,
+            bare,
+        )
+    }
+
+    #[test]
+    fn a_code_is_six_digits_and_its_countdown_sits_inside_the_period() {
+        let (session, carrying, _) = a_session();
+        let answer = totp_for(&session, carrying).unwrap();
+
+        assert_eq!(answer.code.len(), 6);
+        assert!(answer.code.chars().all(char::is_numeric), "{}", answer.code);
+        assert_eq!(answer.period, 30);
+        assert!(
+            answer.remaining > 0 && answer.remaining <= 30,
+            "a countdown of nothing tells the interface a live code has already expired, and \
+             one above the period keeps a stale code on screen: {} of {}",
+            answer.remaining,
+            answer.period
+        );
+    }
+
+    #[test]
+    fn an_entry_without_a_code_is_told_apart_from_an_entry_that_is_not_there() {
+        let (session, _, bare) = a_session();
+
+        let absent = totp_for(&session, bare).unwrap_err();
+        assert!(absent.contains("no TOTP"), "{absent}");
+
+        let unknown = totp_for(&session, Uuid::nil()).unwrap_err();
+        assert!(unknown.contains("no such entry"), "{unknown}");
+    }
+
+    #[test]
+    fn the_code_belongs_to_the_entry_that_was_asked_about() {
+        let (session, carrying, _) = a_session();
+        let direct = session
+            .vault
+            .get(carrying)
+            .unwrap()
+            .totp
+            .as_ref()
+            .unwrap()
+            .current()
+            .unwrap();
+
+        assert_eq!(totp_for(&session, carrying).unwrap().code, direct.0);
     }
 }
