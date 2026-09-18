@@ -39,7 +39,7 @@ anyhow    = "1"
 tauri       = { version = "2", features = [] }
 tauri-build = { version = "2", features = [] }
 tauri-plugin-dialog = "2"
-windows             = { version = "0.61", default-features = false }
+windows             = { version = "0.62", default-features = false }
 arboard     = { version = "3", default-features = false }
 
 obscura-crypto   = { path = "crates/obscura-crypto",   version = "0.1.0" }
