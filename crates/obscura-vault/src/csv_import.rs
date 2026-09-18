@@ -269,3 +269,81 @@ mod tests {
         );
     }
 }
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::indexing_slicing)]
+mod detection {
+    use super::*;
+
+    const CHROME_ROWS: &str = "name,url,username,password,note\n\
+        github.com,https://github.com/login,saheb,hunter2,some note\n";
+
+    #[test]
+    fn every_source_names_itself() {
+        assert_eq!(Source::Bitwarden.label(), "Bitwarden");
+        assert_eq!(Source::Chrome.label(), "Chrome or Edge");
+        assert_eq!(Source::Firefox.label(), "Firefox");
+    }
+
+    #[test]
+    fn a_bitwarden_export_is_recognised_by_either_of_its_login_columns() {
+        let (source, entries, _) = parse(b"name,login_password\nGitHub,hunter2\n").unwrap();
+        assert_eq!(source, Source::Bitwarden);
+        assert_eq!(entries.len(), 1);
+
+        let (source, entries, _) = parse(b"name,login_username\nGitHub,saheb\n").unwrap();
+        assert_eq!(source, Source::Bitwarden);
+        assert_eq!(entries.len(), 1);
+    }
+
+    #[test]
+    fn a_firefox_export_is_refused_unless_all_three_of_its_columns_are_present() {
+        assert!(parse(b"password\nhunter2\n").is_err());
+        assert!(parse(b"username\nsaheb\n").is_err());
+        assert!(parse(b"url,username\nhttps://example.test,saheb\n").is_err());
+        assert!(parse(b"url,password\nhttps://example.test,hunter2\n").is_err());
+    }
+
+    #[test]
+    fn the_bitwarden_type_column_chooses_the_entry_kind() {
+        let text = "type,name,login_password\n\
+            card,Visa,1234\n\
+            identity,Passport,x\n\
+            note,Recipe,x\n\
+            securenote,Diary,x\n\
+            login,GitHub,hunter2\n\
+            anything else,Mystery,x\n";
+        let (_, entries, _) = parse(text.as_bytes()).unwrap();
+
+        assert_eq!(entries.len(), 6);
+        assert_eq!(entries[0].kind, EntryKind::Card);
+        assert_eq!(entries[1].kind, EntryKind::Identity);
+        assert_eq!(entries[2].kind, EntryKind::Note);
+        assert_eq!(entries[3].kind, EntryKind::Note);
+        assert_eq!(entries[4].kind, EntryKind::Login);
+        assert_eq!(entries[5].kind, EntryKind::Login);
+    }
+
+    #[test]
+    fn a_row_that_is_not_readable_text_is_counted_rather_than_dropped_in_silence() {
+        let mut text = Vec::from(CHROME_ROWS.as_bytes());
+        text.extend_from_slice(b"broken,https://example.test,saheb,");
+        text.push(0xff);
+        text.extend_from_slice(b",a note\n");
+
+        let (_, entries, notes) = parse(&text).unwrap();
+        assert_eq!(entries.len(), 1);
+        assert_eq!(notes.skipped_invalid, 1);
+    }
+
+    #[test]
+    fn a_row_the_vault_would_refuse_is_counted_rather_than_dropped_in_silence() {
+        let oversized = "a".repeat(crate::entry::MAX_FIELD_LEN + 1);
+        let text =
+            format!("{CHROME_ROWS}oversized,https://example.test,{oversized},hunter2,a note\n");
+
+        let (_, entries, notes) = parse(text.as_bytes()).unwrap();
+        assert_eq!(entries.len(), 1);
+        assert_eq!(notes.skipped_invalid, 1);
+    }
+}
