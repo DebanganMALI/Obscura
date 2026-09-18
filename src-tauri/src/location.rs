@@ -119,7 +119,11 @@ pub fn parent_writable(path: &Path) -> bool {
 
 #[must_use]
 pub fn is_vault_file(path: &Path) -> bool {
-    fs::read(path).is_ok_and(|bytes| obscura_vault::format::decode_header(&bytes).is_ok())
+    fs::read(path).is_ok_and(|bytes| {
+        obscura_vault::format::decode_header(&bytes).is_ok_and(|(_, _, body_start)| {
+            bytes.len() >= body_start.saturating_add(obscura_crypto::aead::OVERHEAD)
+        })
+    })
 }
 
 #[cfg(test)]
@@ -158,5 +162,116 @@ mod tests {
                 "{folder} was wrongly called a sync folder"
             );
         }
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::indexing_slicing)]
+mod verification {
+    use super::*;
+    use obscura_crypto::KdfParams;
+    use obscura_vault::Vault;
+
+    const FAST: KdfParams = KdfParams {
+        m_cost_kib: 64 * 1024,
+        t_cost: 2,
+        p_cost: 1,
+    };
+
+    fn scratch(name: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("obscura-location-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        dir.join(name)
+    }
+
+    #[test]
+    fn a_real_vault_is_recognised_and_ordinary_files_are_not() {
+        let mut vault = Vault::create(b"correct horse battery staple", FAST).unwrap();
+        let bytes = vault.to_bytes().unwrap();
+
+        let good = scratch("good.obscura");
+        fs::write(&good, &bytes).unwrap();
+        assert!(is_vault_file(&good));
+
+        let text = scratch("notes.txt");
+        fs::write(&text, b"this is not a vault").unwrap();
+        assert!(!is_vault_file(&text));
+
+        let empty = scratch("empty.obscura");
+        fs::write(&empty, b"").unwrap();
+        assert!(!is_vault_file(&empty));
+
+        assert!(!is_vault_file(&scratch("absent.obscura")));
+        assert!(!is_vault_file(good.parent().unwrap()));
+
+        let _ = fs::remove_file(&good);
+        let _ = fs::remove_file(&text);
+        let _ = fs::remove_file(&empty);
+    }
+
+    #[test]
+    fn a_file_carrying_only_a_header_is_not_accepted_as_a_vault() {
+        let mut vault = Vault::create(b"correct horse battery staple", FAST).unwrap();
+        let bytes = vault.to_bytes().unwrap();
+        let (_, _, body_start) = obscura_vault::format::decode_header(&bytes).unwrap();
+
+        let headless = scratch("headless.obscura");
+        fs::write(&headless, &bytes[..body_start]).unwrap();
+
+        assert!(
+            !is_vault_file(&headless),
+            "relocate_vault removes the original vault once this says the new file is sound, so a \
+             file carrying no encrypted body must never pass"
+        );
+
+        let stub = scratch("stub.obscura");
+        let mut partial = bytes[..body_start].to_vec();
+        partial.extend_from_slice(&[0u8; 8]);
+        fs::write(&stub, &partial).unwrap();
+        assert!(
+            !is_vault_file(&stub),
+            "a body too short to hold a sealed message is a torn write, not a vault"
+        );
+
+        let _ = fs::remove_file(&stub);
+        let _ = fs::remove_file(&headless);
+    }
+
+    #[test]
+    fn a_writable_folder_is_reported_and_the_probe_leaves_nothing_behind() {
+        let file = scratch("probe.obscura");
+        let dir = file.parent().unwrap().to_path_buf();
+
+        assert!(parent_writable(&file));
+        assert!(!parent_writable(&dir.join("absent").join("probe.obscura")));
+
+        let left: Vec<_> = fs::read_dir(&dir)
+            .unwrap()
+            .filter_map(Result::ok)
+            .filter(|entry| {
+                entry
+                    .file_name()
+                    .to_string_lossy()
+                    .starts_with(".obscura-write-test-")
+            })
+            .collect();
+        assert!(
+            left.is_empty(),
+            "the writability probe left {} file(s) behind in the user's folder",
+            left.len()
+        );
+    }
+
+    #[test]
+    fn a_sync_folder_is_recognised_at_either_end_of_its_name() {
+        assert!(looks_synced(Path::new(
+            "/home/saheb/Work OneDrive/vault.obscura"
+        )));
+        assert!(looks_synced(Path::new(
+            "/home/saheb/OneDrive Work/vault.obscura"
+        )));
+        assert!(!looks_synced(Path::new(
+            "/home/saheb/one drive over/vault.obscura"
+        )));
     }
 }
