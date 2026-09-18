@@ -20,24 +20,12 @@ use windows::Win32::Networking::WindowsWebServices::{
 };
 use windows::Win32::System::Console::GetConsoleWindow;
 
-use obscura_crypto::{derive, SecretBytes};
+use obscura_crypto::SecretBytes;
 
-use crate::WebAuthnError;
+use crate::{Enrolled, WebAuthnError, PRF_API_VERSION};
 
-const PRF_API_VERSION: u32 = 4;
 const TIMEOUT_MS: u32 = 120_000;
 const SECRET_LEN: u32 = 32;
-const SALT_INFO: &[u8] = b"obscura/passkey/salt/v1";
-
-pub const RP_ID: &str = "spike.obscura.invalid";
-
-#[derive(Debug, Clone)]
-pub struct Enrolled {
-    pub credential_id: Vec<u8>,
-    pub prf_enabled: bool,
-    pub transport: u32,
-}
-
 #[allow(clippy::cast_sign_loss)]
 fn win(error: &windows::core::Error) -> WebAuthnError {
     WebAuthnError::Platform(error.code().0 as u32)
@@ -72,11 +60,6 @@ pub fn transport_name(transport: u32) -> &'static str {
         WEBAUTHN_CTAP_TRANSPORT_HYBRID => "hybrid (phone over QR)",
         _ => "unrecognised",
     }
-}
-
-pub fn salt_for(vault_id: &str) -> Result<[u8; 32], WebAuthnError> {
-    let derived = derive::subkey_from_ikm::<32>(vault_id.as_bytes(), None, SALT_INFO)?;
-    Ok(*derived.expose())
 }
 
 pub fn enroll(

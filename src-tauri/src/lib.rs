@@ -60,6 +60,9 @@ pub fn run() {
             commands::hello_enroll,
             commands::hello_forget,
             commands::unlock_with_hello,
+            commands::passkey_available,
+            commands::passkey_enroll,
+            commands::unlock_with_passkey,
         ])
         .setup(|app| {
             let handle = app.handle().clone();
