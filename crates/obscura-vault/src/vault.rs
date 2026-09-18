@@ -444,6 +444,10 @@ impl Vault {
         Ok(id)
     }
 
+    pub(crate) fn extend_entries(&mut self, entries: Vec<Entry>) {
+        self.entries.extend(entries);
+    }
+
     pub fn remove(&mut self, id: Uuid) -> Result<(), VaultError> {
         let before = self.entries.len();
         self.entries.retain(|e| e.id != id);

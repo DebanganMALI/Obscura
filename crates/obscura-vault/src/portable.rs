@@ -90,17 +90,19 @@ impl Vault {
 
     pub fn import_all(&mut self, entries: Vec<Entry>) -> Result<ImportReport, VaultError> {
         let mut report = ImportReport::default();
+        let mut staged: Vec<Entry> = Vec::with_capacity(entries.len());
 
         for mut entry in entries {
             entry.validate()?;
-            if self.get(entry.id).is_some() {
+            if self.get(entry.id).is_some() || staged.iter().any(|held| held.id == entry.id) {
                 entry.id = Uuid::new_v4();
                 report.renumbered += 1;
             }
-            self.add(entry)?;
+            staged.push(entry);
             report.added += 1;
         }
 
+        self.extend_entries(staged);
         Ok(report)
     }
 }
@@ -258,5 +260,54 @@ mod tests {
 
         let mut vault = Vault::create(b"another password entirely", FAST).unwrap();
         assert!(vault.import(doc).is_err());
+    }
+
+    #[test]
+    fn an_import_that_fails_partway_leaves_the_vault_untouched() {
+        let mut vault = loaded();
+        let before = vault.len();
+
+        let mut oversized = Entry::new_login("Oversized", "saheb");
+        oversized.notes = SecretString::from("x".repeat(crate::entry::MAX_NOTES_LEN + 1));
+
+        let error = vault
+            .import_all(vec![
+                Entry::new_login("Fastmail", "saheb"),
+                oversized,
+                Entry::new_login("Proton", "saheb"),
+            ])
+            .unwrap_err();
+
+        assert_eq!(
+            vault.len(),
+            before,
+            "an import that fails partway must leave nothing behind - Vault::save writes the \
+             whole vault, so the next successful save of any unrelated entry would carry a \
+             half-import to disk ({error:?})"
+        );
+    }
+
+    #[test]
+    fn two_incoming_entries_that_share_an_id_are_both_kept() {
+        let mut vault = loaded();
+        let before = vault.len();
+
+        let first = Entry::new_login("Fastmail", "saheb");
+        let mut second = Entry::new_login("Proton", "saheb");
+        second.id = first.id;
+
+        let report = vault.import_all(vec![first, second]).unwrap();
+
+        assert_eq!(
+            vault.len(),
+            before + 2,
+            "an export carrying the same id twice must import as two entries, not one"
+        );
+        assert_eq!(report.added, 2);
+        assert_eq!(
+            report.renumbered, 1,
+            "the collision is only found by looking at what this same import has already \
+             accepted, not only at what the vault held before it started"
+        );
     }
 }
