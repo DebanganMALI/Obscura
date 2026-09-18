@@ -843,3 +843,13 @@ fn a_header_edit_that_still_parses_is_caught_by_the_body_tag() {
         "a header edit that parsed cleanly was accepted"
     );
 }
+
+#[test]
+fn a_vault_that_holds_entries_says_so_and_never_shows_its_key() {
+    let vault = seeded_vault();
+    assert!(!vault.is_empty());
+
+    let shown = format!("{vault:?}");
+    assert!(shown.contains("Vault"));
+    assert!(shown.contains("<redacted>"));
+}

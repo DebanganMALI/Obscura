@@ -517,3 +517,38 @@ pub const fn format_version() -> u16 {
 pub const fn prefix_len() -> usize {
     PREFIX_LEN
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_format_the_writer_stamps_is_the_one_the_reader_expects() {
+        assert_eq!(format_version(), 1);
+        assert_eq!(prefix_len(), 14);
+    }
+}
+
+#[cfg(all(test, unix))]
+#[allow(clippy::unwrap_used)]
+mod permissions {
+    use super::*;
+
+    #[test]
+    fn restricting_a_file_leaves_it_readable_only_by_its_owner() {
+        use std::os::unix::fs::PermissionsExt as _;
+
+        let dir = std::env::temp_dir().join("obscura-owner-only");
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("sample.obscura");
+        fs::write(&path, b"sample").unwrap();
+        fs::set_permissions(&path, fs::Permissions::from_mode(0o666)).unwrap();
+
+        restrict_to_owner(&path).unwrap();
+
+        let mode = fs::metadata(&path).unwrap().permissions().mode() & 0o777;
+        assert_eq!(mode, OWNER_ONLY);
+
+        let _ = fs::remove_file(&path);
+    }
+}
