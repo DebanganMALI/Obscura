@@ -186,7 +186,7 @@ fn check_new_vault_location(target: &std::path::Path) -> Result<(), String> {
     match target.parent() {
         Some(parent) if parent.is_dir() => Ok(()),
         Some(parent) => Err(format!(
-                "the folder {} does not exist - if the vault lives on an encrypted volume or a removable disk, mount it first",
+            "the folder {} does not exist - if the vault lives on an encrypted volume or a removable disk, mount it first",
             parent.display()
         )),
         None => Err("that is not a valid file path".to_owned()),
