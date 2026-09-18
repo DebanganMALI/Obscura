@@ -126,7 +126,7 @@ impl Totp {
             .duration_since(std::time::UNIX_EPOCH)
             .map_err(|_| VaultError::Clock)?
             .as_secs();
-        let remaining = self.period - (now % self.period);
+        let remaining = remaining_in_period(now, self.period);
         Ok((self.code_at(now)?, remaining))
     }
 
@@ -358,4 +358,129 @@ fn percent_encode(input: &str) -> String {
         }
     }
     out
+}
+
+const fn remaining_in_period(now: u64, period: u64) -> u64 {
+    period - (now % period)
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod vectors {
+    use super::*;
+
+    const RFC4648: [(&str, &str); 6] = [
+        ("f", "MY"),
+        ("fo", "MZXQ"),
+        ("foo", "MZXW6"),
+        ("foob", "MZXW6YQ"),
+        ("fooba", "MZXW6YTB"),
+        ("foobar", "MZXW6YTBOI"),
+    ];
+
+    #[test]
+    fn base32_matches_rfc4648_in_both_directions() {
+        for (plain, encoded) in RFC4648 {
+            assert_eq!(
+                base32_encode(plain.as_bytes()),
+                encoded,
+                "encoding {plain:?} did not match the RFC vector"
+            );
+            assert_eq!(
+                base32_decode(encoded).unwrap(),
+                plain.as_bytes(),
+                "decoding {encoded:?} did not match the RFC vector"
+            );
+        }
+    }
+
+    #[test]
+    fn an_input_that_fills_the_last_group_gains_no_extra_symbol() {
+        assert_eq!(base32_encode(b"").len(), 0);
+        assert_eq!(base32_encode(b"fooba").len(), 8);
+        assert_eq!(base32_encode(b"foobar").len(), 10);
+    }
+
+    #[test]
+    fn every_algorithm_the_uri_may_name_is_understood() {
+        assert_eq!(TotpAlgorithm::parse("SHA1").unwrap(), TotpAlgorithm::Sha1);
+        assert_eq!(
+            TotpAlgorithm::parse("SHA256").unwrap(),
+            TotpAlgorithm::Sha256
+        );
+        assert_eq!(
+            TotpAlgorithm::parse("SHA512").unwrap(),
+            TotpAlgorithm::Sha512
+        );
+        assert_eq!(
+            TotpAlgorithm::parse("sha512").unwrap(),
+            TotpAlgorithm::Sha512
+        );
+        assert!(TotpAlgorithm::parse("MD5").is_err());
+
+        for algorithm in [
+            TotpAlgorithm::Sha1,
+            TotpAlgorithm::Sha256,
+            TotpAlgorithm::Sha512,
+        ] {
+            assert_eq!(TotpAlgorithm::parse(algorithm.as_str()).unwrap(), algorithm);
+        }
+    }
+
+    #[test]
+    fn a_sha512_uri_survives_the_round_trip() {
+        let totp = Totp::from_uri(
+            "otpauth://totp/Acme:me?secret=JBSWY3DPEHPK3PXP&algorithm=SHA512&digits=8&period=60",
+        )
+        .unwrap();
+        assert_eq!(totp.algorithm(), TotpAlgorithm::Sha512);
+        assert_eq!(totp.digits(), 8);
+        assert_eq!(totp.period(), 60);
+        assert_eq!(totp.code_at(0).unwrap().len(), 8);
+    }
+
+    #[test]
+    fn an_issuer_given_only_in_the_query_is_kept() {
+        let totp =
+            Totp::from_uri("otpauth://totp/Example?secret=JBSWY3DPEHPK3PXP&issuer=Acme").unwrap();
+        assert_eq!(totp.issuer(), Some("Acme"));
+        assert_eq!(totp.account(), Some("Example"));
+    }
+
+    #[test]
+    fn the_seconds_left_count_down_within_the_period() {
+        assert_eq!(remaining_in_period(0, 30), 30);
+        assert_eq!(remaining_in_period(1, 30), 29);
+        assert_eq!(remaining_in_period(29, 30), 1);
+        assert_eq!(remaining_in_period(30, 30), 30);
+        assert_eq!(remaining_in_period(59, 30), 1);
+        assert_eq!(remaining_in_period(7, 60), 53);
+    }
+
+    #[test]
+    fn the_current_code_has_the_shape_the_entry_asked_for() {
+        let totp = Totp::from_base32("JBSWY3DPEHPK3PXP", TotpAlgorithm::Sha1, 6, 30).unwrap();
+        let (code, remaining) = totp.current().unwrap();
+        assert_eq!(code.len(), 6);
+        assert!(code.bytes().all(|b| b.is_ascii_digit()));
+        assert!((1..=30).contains(&remaining));
+    }
+
+    #[test]
+    fn a_label_is_escaped_only_where_it_has_to_be() {
+        assert_eq!(percent_encode("abc123"), "abc123");
+        assert_eq!(percent_encode("a-b_c.d~e"), "a-b_c.d~e");
+        assert_eq!(
+            percent_encode("Acme Corp:me@example.test"),
+            "Acme%20Corp%3Ame%40example.test"
+        );
+    }
+
+    #[test]
+    fn the_debug_form_redacts_the_secret_rather_than_printing_nothing() {
+        let totp = Totp::from_base32("JBSWY3DPEHPK3PXP", TotpAlgorithm::Sha1, 6, 30).unwrap();
+        let shown = format!("{totp:?}");
+        assert!(shown.contains("<redacted>"));
+        assert!(shown.contains("Sha1"));
+    }
 }
