@@ -104,7 +104,14 @@ fn entry_for(vault: &Vault) -> Result<Record, String> {
 }
 
 pub fn check(app: &tauri::AppHandle, vault: &Vault) -> Verdict {
-    let book = match config_dir(app).and_then(|dir| read_book(&dir.join(FILE))) {
+    match config_dir(app) {
+        Ok(dir) => check_in(&dir, vault),
+        Err(reason) => Verdict::Unreadable(reason),
+    }
+}
+
+pub fn check_in(dir: &Path, vault: &Vault) -> Verdict {
+    let book = match read_book(&dir.join(FILE)) {
         Ok(book) => book,
         Err(reason) => return Verdict::Unreadable(reason),
     };
@@ -130,14 +137,20 @@ pub fn check(app: &tauri::AppHandle, vault: &Vault) -> Verdict {
 }
 
 pub fn record(app: &tauri::AppHandle, vault: &Vault) -> Result<(), String> {
-    let dir = config_dir(app)?;
+    record_in(&config_dir(app)?, vault)
+}
+
+pub fn record_in(dir: &Path, vault: &Vault) -> Result<(), String> {
     let mut book = read_book(&dir.join(FILE))?;
     book.insert(vault.id().to_string(), entry_for(vault)?);
-    write_book(&dir, &book)
+    write_book(dir, &book)
 }
 
 pub fn reset_to(app: &tauri::AppHandle, vault: &Vault) -> Result<(), String> {
-    let dir = config_dir(app)?;
+    reset_to_in(&config_dir(app)?, vault)
+}
+
+pub fn reset_to_in(dir: &Path, vault: &Vault) -> Result<(), String> {
     let existing = dir.join(FILE);
     if existing.exists() {
         fs::rename(&existing, dir.join(DAMAGED))
@@ -145,11 +158,11 @@ pub fn reset_to(app: &tauri::AppHandle, vault: &Vault) -> Result<(), String> {
     }
     let mut book = Book::new();
     book.insert(vault.id().to_string(), entry_for(vault)?);
-    write_book(&dir, &book)
+    write_book(dir, &book)
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used)]
+#[allow(clippy::unwrap_used, clippy::panic)]
 mod tests {
     use super::*;
 
@@ -248,6 +261,112 @@ mod tests {
 
         let back = read_book(&dir.join(FILE)).unwrap();
         assert_eq!(back.get("a").unwrap().revision, 7);
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    const FAST: obscura_crypto::KdfParams = obscura_crypto::KdfParams {
+        m_cost_kib: 64 * 1024,
+        t_cost: 2,
+        p_cost: 1,
+    };
+
+    const PASSWORD: &[u8] = b"correct horse battery staple";
+
+    fn a_vault() -> Vault {
+        Vault::create(PASSWORD, FAST).unwrap()
+    }
+
+    #[test]
+    fn a_vault_never_seen_before_is_fresh_and_recording_it_makes_it_current() {
+        let dir = scratch();
+        let vault = a_vault();
+
+        assert!(matches!(check_in(&dir, &vault), Verdict::Fresh));
+        record_in(&dir, &vault).unwrap();
+        assert!(matches!(check_in(&dir, &vault), Verdict::Current));
+
+        let stranger = a_vault();
+        assert!(
+            matches!(check_in(&dir, &stranger), Verdict::Fresh),
+            "one vault record must never answer for another, or opening a second vault would \
+             be judged against the first"
+        );
+
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn a_vault_restored_from_an_older_copy_is_caught() {
+        let dir = scratch();
+        let mut vault = a_vault();
+
+        let older = vault.to_bytes().unwrap();
+        let _newer = vault.to_bytes().unwrap();
+        record_in(&dir, &vault).unwrap();
+
+        let restored =
+            Vault::from_bytes(&older, &obscura_vault::Credential::Password(PASSWORD), None)
+                .unwrap();
+
+        match check_in(&dir, &restored) {
+            Verdict::Rollback { found, expected } => {
+                assert_eq!(found, restored.revision());
+                assert_eq!(expected, vault.revision());
+            }
+            _ => panic!(
+                "an older copy of the vault put back in place is the attack this whole file \
+                 exists to catch"
+            ),
+        }
+
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn a_record_that_does_not_verify_is_tampering_however_it_was_spoiled() {
+        let dir = scratch();
+        let vault = a_vault();
+        record_in(&dir, &vault).unwrap();
+
+        for spoiled in ["00".repeat(TAG_LEN), "not hexadecimal".to_owned()] {
+            let mut book = read_book(&dir.join(FILE)).unwrap();
+            book.get_mut(&vault.id().to_string()).unwrap().tag = spoiled.clone();
+            write_book(&dir, &book).unwrap();
+
+            assert!(
+                matches!(check_in(&dir, &vault), Verdict::Tampered),
+                "a record that does not verify must never read as current: {spoiled}"
+            );
+        }
+
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn resetting_sets_the_old_book_aside_and_keeps_only_this_vault() {
+        let dir = scratch();
+        let vault = a_vault();
+        let stranger = a_vault();
+
+        record_in(&dir, &stranger).unwrap();
+        record_in(&dir, &vault).unwrap();
+        fs::write(dir.join(FILE), b"{ this is not json").unwrap();
+        assert!(matches!(check_in(&dir, &vault), Verdict::Unreadable(_)));
+
+        reset_to_in(&dir, &vault).unwrap();
+
+        assert!(
+            dir.join(DAMAGED).exists(),
+            "the unreadable book is set aside rather than deleted, because it is the only \
+             evidence of whatever spoiled it"
+        );
+        assert!(matches!(check_in(&dir, &vault), Verdict::Current));
+        assert!(
+            matches!(check_in(&dir, &stranger), Verdict::Fresh),
+            "resetting keeps only the vault being opened, so every other vault loses its \
+              rollback protection and silently becomes fresh again"
+        );
+
         fs::remove_dir_all(&dir).unwrap();
     }
 }
