@@ -1268,3 +1268,106 @@ mod plain_parts {
         assert!(matches!(TargetState::of(true, false), TargetState::Foreign));
     }
 }
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::indexing_slicing)]
+mod unlock_and_info {
+    use super::*;
+    use obscura_vault::VaultError as E;
+
+    const FAST: KdfParams = KdfParams {
+        m_cost_kib: 64 * 1024,
+        t_cost: 2,
+        p_cost: 1,
+    };
+
+    const PASSWORD: &[u8] = b"correct horse battery staple";
+
+    fn shown(error: &UnlockError) -> String {
+        serde_json::to_string(error).unwrap()
+    }
+
+    fn a_session() -> Session {
+        let mut vault = Vault::create(PASSWORD, FAST).unwrap();
+        vault.add(Entry::new_login("GitHub", "saheb")).unwrap();
+        Session::new(vault, PathBuf::from("vault.obscura"))
+    }
+
+    #[test]
+    fn a_wrong_password_is_never_reported_as_a_damaged_file() {
+        let told = shown(&unlock_failure(&E::NoMatchingSlot));
+        assert!(
+            told.contains("that password does not open this vault"),
+            "{told}"
+        );
+        assert!(!told.contains("damaged"), "{told}");
+        assert!(!told.contains("not an Obscura vault"), "{told}");
+    }
+
+    #[test]
+    fn a_damaged_file_is_never_reported_as_a_wrong_password() {
+        let told = shown(&unlock_failure(&E::Corrupt("the header is truncated")));
+        assert!(told.contains("damaged"), "{told}");
+        assert!(told.contains("the header is truncated"), "{told}");
+        assert!(!told.contains("password"), "{told}");
+    }
+
+    #[test]
+    fn every_other_arm_says_something_of_its_own() {
+        assert!(shown(&unlock_failure(&E::BadMagic)).contains("not an Obscura vault"));
+        assert!(shown(&unlock_failure(&E::UnsupportedVersion(7))).contains('7'));
+        assert!(
+            shown(&unlock_failure(&E::Io("permission denied".to_owned())))
+                .contains("permission denied")
+        );
+
+        let fallback = E::RecoveryCodeFormat;
+        let told = shown(&unlock_failure(&fallback));
+        assert!(told.contains(&fallback.to_string()), "{told}");
+    }
+
+    #[test]
+    fn the_summary_describes_the_vault_the_session_holds() {
+        let session = a_session();
+        let summary = info(&session, 300);
+
+        assert_eq!(summary.entry_count, 1);
+        assert_eq!(summary.auto_lock_secs, 300);
+        assert_eq!(summary.path, "vault.obscura");
+        assert!(summary.has_password);
+        assert_eq!(summary.revision, session.vault.revision());
+
+        assert_eq!(summary.slots.len(), 1);
+        assert_eq!(summary.slots[0].kind, "password");
+        assert!(summary.slots[0].portable);
+        assert!(
+            summary.slots[0].created_at.contains('T'),
+            "a slot's creation time reaches the interface as RFC 3339: {}",
+            summary.slots[0].created_at
+        );
+    }
+
+    #[test]
+    fn the_summary_never_carries_the_master_password() {
+        let session = a_session();
+        let json = serde_json::to_string(&info(&session, 300)).unwrap();
+        assert!(!json.contains("correct horse battery staple"), "{json}");
+    }
+
+    #[test]
+    fn an_obscura_export_is_read_as_one_rather_than_falling_through_to_the_csv_reader() {
+        let session = a_session();
+        let doc = session.vault.export();
+        let bytes = portable::encode(&doc).unwrap();
+
+        let (label, entries, notes) = read_import(bytes.as_slice()).unwrap();
+
+        assert!(
+            label.contains("Obscura"),
+            "a user's own backup must be named as one: {label}"
+        );
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].title, "GitHub");
+        assert_eq!(notes.skipped_blank + notes.skipped_invalid, 0);
+    }
+}
