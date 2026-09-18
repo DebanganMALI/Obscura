@@ -99,6 +99,7 @@
         <button class="btn btn--primary btn--block" type="submit" id="gate-submit">Unlock</button>
         <button class="loc__alt center" type="button" id="gate-use-recovery" hidden>Use a recovery code instead</button>
         <button class="loc__alt center" type="button" id="gate-use-hello" hidden>Unlock with Windows Hello</button>
+        <button class="loc__alt center" type="button" id="gate-use-passkey" hidden>Unlock with a phone passkey</button>
       </div>
     </form>
   </section>
@@ -277,13 +278,14 @@
       <p class="section__label">Unlock methods</p>
       <div class="card">
         <div id="s-slots"></div>
-        <p class="hint">A password lives in your head and a recovery code lives on
-          paper; both move to a new machine. Obscura will not let you remove the last
-          one of those, because a vault that only this computer can open is a vault
-          you lose with the computer.</p>
+        <p class="hint">A password lives in your head, a recovery code lives on paper,
+          and a phone passkey lives on your phone; all three move to a new machine.
+          Obscura will not let you remove the last one of those, because a vault that
+          only this computer can open is a vault you lose with the computer.</p>
         <div class="row-inline mt-20">
           <button class="btn btn--ghost" type="button" id="s-add-recovery">Add recovery code</button>
           <button class="btn btn--ghost" type="button" id="s-add-hello">Set up Windows Hello</button>
+          <button class="btn btn--ghost" type="button" id="s-add-passkey">Add a phone passkey</button>
         </div>
         <p class="error" id="s-slots-error"></p>
       </div>

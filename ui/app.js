@@ -143,6 +143,7 @@ let gateProbe = null;
 let gateBlocked = false;
 let gateRecoveryMode = false;
 let helloAvailable = false;
+let passkeyAvailable = false;
 
 async function refreshGate() {
   try {
@@ -196,6 +197,7 @@ function applyGateMode() {
 
   $("gate-use-recovery").hidden = creating;
   $("gate-use-hello").hidden = creating || !helloAvailable;
+  $("gate-use-passkey").hidden = creating || !passkeyAvailable;
   if (creating) gateRecoveryMode = false;
 
   $("gate-eyebrow").textContent = creating ? "First run" : "Vault locked";
@@ -269,6 +271,56 @@ $("gate-use-hello").addEventListener("click", async () => {
     button.textContent = "Unlock with Windows Hello";
   }
 });
+
+$("gate-use-passkey").addEventListener("click", async () => {
+  const error = $("gate-error");
+  const button = $("gate-use-passkey");
+  error.textContent = "";
+  button.disabled = true;
+  button.textContent = "Scan the QR code with your phone...";
+
+  const args = {
+    path: gateProbe ? gateProbe.path : null,
+    remember: $("loc-remember").checked,
+  };
+
+  try {
+    let info;
+    try {
+      info = await invoke("unlock_with_passkey", args);
+    } catch (err) {
+      if (!err || !err.confirm) throw err;
+      const accepted = await confirmRevision(err);
+      if (accepted === null) {
+        error.textContent = "Left as it is. Nothing was opened or changed.";
+        return;
+      }
+      args.acceptRevision = accepted;
+      info = await invoke("unlock_with_passkey", args);
+    }
+    state.info = info;
+    $("gate-password").value = "";
+    enterApp();
+    if (!hasRecoverySlot()) await openRecovery(true);
+  } catch (err) {
+    error.textContent = errText(err);
+  } finally {
+    button.disabled = false;
+    button.textContent = "Unlock with a phone passkey";
+  }
+});
+
+(async () => {
+  try {
+    passkeyAvailable = await invoke("passkey_available");
+  } catch (err) {
+    passkeyAvailable = false;
+  }
+  if (!passkeyAvailable) {
+    $("gate-use-passkey").hidden = true;
+    $("s-add-passkey").hidden = true;
+  }
+})();
 
 (async () => {
   try {
@@ -1006,7 +1058,11 @@ async function removeSlot(slot) {
     const command = slot.kind === "hardware" ? "hello_forget" : "remove_slot";
     state.info = await invoke(command, { id: slot.id });
     renderSlots(state.info.slots);
-    toast(slot.label + " removed");
+    toast(
+      slot.kind === "passkey"
+        ? slot.label + " removed. The credential is still on the phone until you delete it there."
+        : slot.label + " removed"
+    );
   } catch (err) {
     error.textContent = String(err);
   }
@@ -1030,6 +1086,24 @@ $("s-add-hello").addEventListener("click", async () => {
     error.textContent = String(err);
   } finally {
     button.disabled = false;
+  }
+});
+
+$("s-add-passkey").addEventListener("click", async () => {
+  const error = $("s-slots-error");
+  const button = $("s-add-passkey");
+  error.textContent = "";
+  button.disabled = true;
+  button.textContent = "Scan the QR code twice...";
+  try {
+    state.info = await invoke("passkey_enroll", { label: "Phone passkey" });
+    renderSlots(state.info.slots);
+    toast("This phone can now open the vault");
+  } catch (err) {
+    error.textContent = String(err);
+  } finally {
+    button.disabled = false;
+    button.textContent = "Add a phone passkey";
   }
 });
 
