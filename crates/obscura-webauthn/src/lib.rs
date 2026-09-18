@@ -4,7 +4,9 @@
 mod imp;
 
 #[cfg(target_os = "windows")]
-pub use imp::{api_version, console_window, enroll, prf_secret, transport_name, Enrolled};
+pub use imp::{
+    api_version, console_window, enroll, prf_secret, salt_for, transport_name, Enrolled, RP_ID,
+};
 
 #[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
@@ -23,4 +25,7 @@ pub enum WebAuthnError {
 
     #[error("the platform refused the request (HRESULT 0x{0:08X})")]
     Platform(u32),
+
+    #[error(transparent)]
+    Crypto(#[from] obscura_crypto::CryptoError),
 }
