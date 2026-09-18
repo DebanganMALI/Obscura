@@ -309,3 +309,64 @@ mod tests {
         assert_ne!(checksum(a.seed()), checksum(b.seed()));
     }
 }
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod folding {
+    use super::*;
+
+    #[test]
+    fn the_letters_a_hand_confuses_for_digits_are_folded() {
+        assert_eq!(value_of('I'), Some(1));
+        assert_eq!(value_of('i'), Some(1));
+        assert_eq!(value_of('L'), Some(1));
+        assert_eq!(value_of('l'), Some(1));
+        assert_eq!(value_of('1'), Some(1));
+        assert_eq!(value_of('O'), Some(0));
+        assert_eq!(value_of('o'), Some(0));
+        assert_eq!(value_of('0'), Some(0));
+        assert_eq!(value_of('A'), Some(10));
+        assert_eq!(value_of('Z'), Some(31));
+        assert_eq!(value_of('U'), None);
+        assert_eq!(value_of('!'), None);
+    }
+}
+
+#[cfg(test)]
+mod vectors {
+    use super::*;
+
+    #[test]
+    fn the_checksum_is_stable_for_a_given_seed() {
+        assert_eq!(checksum(&SecretBytes::from_bytes([0x00; SEED_LEN])), "DRXN");
+        assert_eq!(checksum(&SecretBytes::from_bytes([0xff; SEED_LEN])), "NEZA");
+        assert_eq!(checksum(&SecretBytes::from_bytes([0x5a; SEED_LEN])), "9X58");
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::indexing_slicing, clippy::unwrap_used)]
+mod canonical {
+    use super::*;
+
+    #[test]
+    fn a_code_carrying_stray_padding_bits_is_refused_though_its_checksum_still_matches() {
+        let code = RecoveryCode::from_seed(SecretBytes::from_bytes([0u8; SEED_LEN]));
+        let mut bytes = code.to_printable().into_bytes();
+
+        assert_eq!(
+            bytes[57], b'0',
+            "the last data symbol is not where this test expects it"
+        );
+        bytes[57] = b'1';
+
+        let mangled = String::from_utf8(bytes).unwrap();
+        assert!(
+            matches!(
+                RecoveryCode::parse(&mangled),
+                Err(VaultError::RecoveryCodeFormat)
+            ),
+            "a code with non-zero padding bits was accepted, so two different codes open one vault"
+        );
+    }
+}
