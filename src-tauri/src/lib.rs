@@ -56,6 +56,10 @@ pub fn run() {
             commands::discard_recovery_code,
             commands::unlock_with_recovery,
             commands::remove_slot,
+            commands::hello_available,
+            commands::hello_enroll,
+            commands::hello_forget,
+            commands::unlock_with_hello,
         ])
         .setup(|app| {
             let handle = app.handle().clone();
