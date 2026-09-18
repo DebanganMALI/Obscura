@@ -20,3 +20,6 @@ probe/
 mutants.out/
 mutants.out.old/
 lcov.info
+*.msix
+*.msixbundle
+packaging/windows/dist/
