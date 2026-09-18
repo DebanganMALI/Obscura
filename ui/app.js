@@ -981,7 +981,6 @@ async function openSettings() {
   const info = state.info;
   $("s-path").textContent = info.path;
   $("s-count").textContent = String(info.entryCount);
-  $("s-revision").textContent = String(info.revision);
   renderSlots(info.slots);
   $("s-autolock").value = String(Math.round(info.autoLockSecs / 60));
   $("s-autolock-val").textContent = $("s-autolock").value;
@@ -1150,7 +1149,6 @@ $("s-import").addEventListener("click", async () => {
     if (!result) return;
     state.info = result.info;
     $("s-count").textContent = String(result.info.entryCount);
-    $("s-revision").textContent = String(result.info.revision);
     const many = (n, one, more) => n + " " + (n === 1 ? one : more);
     const asides = [];
     if (result.renumbered) {
