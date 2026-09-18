@@ -28,7 +28,6 @@ fn main() {
     let enrolled = match hello::enroll(PROBE_ID) {
         Ok(seed) => {
             println!("enrol:           ok");
-            println!("seed (first 8):  {:02x?}", &seed.expose()[..8]);
             seed
         }
         Err(e) => {
@@ -46,7 +45,6 @@ fn main() {
         Ok(again) => {
             let same = again.expose() == enrolled.expose();
             println!("unlock:          ok");
-            println!("seed (first 8):  {:02x?}", &again.expose()[..8]);
             println!("\nseeds match:     {}", if same { "YES" } else { "NO" });
             if same {
                 println!("\nHardware unlock will work on this machine.");
