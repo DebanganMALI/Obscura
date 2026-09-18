@@ -143,6 +143,11 @@ pub fn parent_writable(path: &Path) -> bool {
 }
 
 #[must_use]
+pub fn file_writable(path: &Path) -> bool {
+    fs::OpenOptions::new().append(true).open(path).is_ok()
+}
+
+#[must_use]
 pub fn is_vault_file(path: &Path) -> bool {
     fs::read(path).is_ok_and(|bytes| {
         obscura_vault::format::decode_header(&bytes).is_ok_and(|(_, _, body_start)| {
@@ -374,6 +379,42 @@ mod remembering {
              vault that is not there"
         );
 
+        fs::remove_dir_all(&dir).unwrap();
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::permissions_set_readonly_false)]
+mod writability {
+    use super::*;
+
+    #[test]
+    fn a_read_only_file_is_not_writable_though_its_folder_still_is() {
+        let dir = std::env::temp_dir().join(format!("obscura-readonly-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("vault.obscura");
+        fs::write(&file, b"anything").unwrap();
+
+        assert!(file_writable(&file));
+
+        let mut locked = fs::metadata(&file).unwrap().permissions();
+        locked.set_readonly(true);
+        fs::set_permissions(&file, locked).unwrap();
+
+        assert!(
+            !file_writable(&file),
+            "a read-only vault has to be reported before the user types a password, not \
+             discovered at save time once they have done work"
+        );
+        assert!(
+            parent_writable(&file),
+            "the folder is still writable, which is exactly why the file has to be \
+             checked separately rather than inferred from its parent"
+        );
+
+        let mut freed = fs::metadata(&file).unwrap().permissions();
+        freed.set_readonly(false);
+        fs::set_permissions(&file, freed).unwrap();
         fs::remove_dir_all(&dir).unwrap();
     }
 }
