@@ -46,6 +46,7 @@ impl From<StoredKdf> for KdfParams {
 pub enum SlotKind {
     Password,
     Recovery,
+    Passkey,
     Hardware,
 }
 

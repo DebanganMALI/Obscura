@@ -87,7 +87,10 @@ fn info(session: &Session, auto_lock_secs: u64) -> VaultInfo {
                     .created_at
                     .format(&time::format_description::well_known::Rfc3339)
                     .unwrap_or_default(),
-                portable: matches!(slot.kind, SlotKind::Password | SlotKind::Recovery),
+                portable: matches!(
+                    slot.kind,
+                    SlotKind::Password | SlotKind::Recovery | SlotKind::Passkey
+                ),
             })
             .collect(),
         path: session.path.display().to_string(),

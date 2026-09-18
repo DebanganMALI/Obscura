@@ -273,7 +273,12 @@ impl Vault {
         self.header
             .slots
             .iter()
-            .filter(|slot| matches!(slot.kind, SlotKind::Password | SlotKind::Recovery))
+            .filter(|slot| {
+                matches!(
+                    slot.kind,
+                    SlotKind::Password | SlotKind::Recovery | SlotKind::Passkey
+                )
+            })
             .count()
     }
 
@@ -293,7 +298,10 @@ impl Vault {
         let Some(target) = self.header.slots.iter().find(|slot| slot.id == id) else {
             return Err(VaultError::NoMatchingSlot);
         };
-        let removing_portable = matches!(target.kind, SlotKind::Password | SlotKind::Recovery);
+        let removing_portable = matches!(
+            target.kind,
+            SlotKind::Password | SlotKind::Recovery | SlotKind::Passkey
+        );
 
         if removing_portable && self.portable_slots() <= 1 {
             return Err(VaultError::LastPortableSlot);

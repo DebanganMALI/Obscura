@@ -853,3 +853,45 @@ fn a_vault_that_holds_entries_says_so_and_never_shows_its_key() {
     assert!(shown.contains("Vault"));
     assert!(shown.contains("<redacted>"));
 }
+
+#[test]
+fn a_passkey_is_a_way_back_in_and_a_hardware_slot_is_not() {
+    let mut vault = seeded_vault();
+    let hardware = new_recovery_identity().unwrap();
+    let passkey = new_recovery_identity().unwrap();
+
+    vault
+        .add_identity_slot(SlotKind::Hardware, "This PC", &hardware)
+        .unwrap();
+
+    let password_slot = vault
+        .slots()
+        .iter()
+        .find(|s| s.kind == SlotKind::Password)
+        .unwrap()
+        .id;
+
+    assert_eq!(
+        vault.remove_slot(password_slot),
+        Err(VaultError::LastPortableSlot),
+        "a hardware slot is bound to one machine, so it must never count as the only way back in"
+    );
+
+    let passkey_slot = vault
+        .add_identity_slot(SlotKind::Passkey, "Phone", &passkey)
+        .unwrap();
+    assert_eq!(vault.portable_slots(), 2);
+
+    vault.remove_slot(password_slot).unwrap();
+    assert_eq!(vault.portable_slots(), 1);
+
+    assert_eq!(
+        vault.remove_slot(passkey_slot),
+        Err(VaultError::LastPortableSlot),
+        "the passkey is the only portable slot left"
+    );
+
+    let bytes = vault.to_bytes().unwrap();
+    assert!(Vault::from_bytes(&bytes, &Credential::Identity(&passkey), None).is_ok());
+    assert!(Vault::from_bytes(&bytes, &Credential::Password(PASSWORD), None).is_err());
+}
