@@ -20,11 +20,16 @@ use windows::Win32::Networking::WindowsWebServices::{
 };
 use windows::Win32::System::Console::GetConsoleWindow;
 
+use obscura_crypto::{derive, SecretBytes};
+
 use crate::WebAuthnError;
 
 const PRF_API_VERSION: u32 = 4;
 const TIMEOUT_MS: u32 = 120_000;
 const SECRET_LEN: u32 = 32;
+const SALT_INFO: &[u8] = b"obscura/passkey/salt/v1";
+
+pub const RP_ID: &str = "spike.obscura.invalid";
 
 #[derive(Debug, Clone)]
 pub struct Enrolled {
@@ -63,6 +68,11 @@ pub fn transport_name(transport: u32) -> &'static str {
         WEBAUTHN_CTAP_TRANSPORT_HYBRID => "hybrid (phone over QR)",
         _ => "unrecognised",
     }
+}
+
+pub fn salt_for(vault_id: &str) -> Result<[u8; 32], WebAuthnError> {
+    let derived = derive::subkey_from_ikm::<32>(vault_id.as_bytes(), None, SALT_INFO)?;
+    Ok(*derived.expose())
 }
 
 pub fn enroll(
@@ -160,7 +170,11 @@ pub fn enroll(
     outcome
 }
 
-pub fn prf_secret(hwnd: HWND, rp_id: &str, salt: &[u8; 32]) -> Result<[u8; 32], WebAuthnError> {
+pub fn prf_secret(
+    hwnd: HWND,
+    rp_id: &str,
+    salt: &[u8; 32],
+) -> Result<SecretBytes<32>, WebAuthnError> {
     let rp_id_w = HSTRING::from(rp_id);
     let mut data = client_data("webauthn.get", rp_id);
     let mut salt_bytes = salt.to_vec();
@@ -219,7 +233,7 @@ pub fn prf_secret(hwnd: HWND, rp_id: &str, salt: &[u8; 32]) -> Result<[u8; 32], 
                     secret.pbFirst,
                     SECRET_LEN as usize,
                 ));
-                Ok(out)
+                Ok(SecretBytes::from_bytes(out))
             }
         }
     };

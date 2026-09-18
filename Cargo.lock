@@ -2603,6 +2603,7 @@ dependencies = [
 name = "obscura-webauthn"
 version = "0.1.0"
 dependencies = [
+ "obscura-crypto",
  "thiserror 2.0.20",
  "windows",
 ]
