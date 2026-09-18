@@ -12,6 +12,11 @@ pub const fn transport_name(_transport: u32) -> &'static str {
     "unsupported"
 }
 
+#[must_use]
+pub const fn label_for(_transport: u32) -> &'static str {
+    "Passkey"
+}
+
 pub fn enroll(
     _window: isize,
     _rp_id: &str,

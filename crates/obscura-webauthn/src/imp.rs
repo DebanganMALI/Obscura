@@ -51,6 +51,18 @@ fn window_handle(window: isize) -> HWND {
 }
 
 #[must_use]
+pub fn label_for(transport: u32) -> &'static str {
+    match transport {
+        WEBAUTHN_CTAP_TRANSPORT_HYBRID => "Phone or tablet",
+        WEBAUTHN_CTAP_TRANSPORT_INTERNAL => "This computer",
+        WEBAUTHN_CTAP_TRANSPORT_USB => "Security key",
+        WEBAUTHN_CTAP_TRANSPORT_NFC => "Security key over NFC",
+        WEBAUTHN_CTAP_TRANSPORT_BLE => "Security key over Bluetooth",
+        _ => "Passkey",
+    }
+}
+
+#[must_use]
 pub fn transport_name(transport: u32) -> &'static str {
     match transport {
         WEBAUTHN_CTAP_TRANSPORT_USB => "usb",

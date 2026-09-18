@@ -1002,6 +1002,13 @@ async function openSettings() {
   $("settings-scrim").hidden = false;
 }
 
+const SLOT_KINDS = {
+  password: "master password",
+  recovery: "recovery code",
+  passkey: "passkey",
+  hardware: "this computer",
+};
+
 function renderSlots(slots) {
   const host = $("s-slots");
   host.replaceChildren();
@@ -1013,7 +1020,8 @@ function renderSlots(slots) {
     const body = h("span", "slot__body");
     body.append(h("span", "slot__label", slot.label));
     const added = slot.createdAt ? slot.createdAt.slice(0, 10) : "";
-    body.append(h("span", "slot__meta", slot.kind + (added ? "  -  added " + added : "")));
+    const kindText = SLOT_KINDS[slot.kind] || slot.kind;
+    body.append(h("span", "slot__meta", kindText + (added ? "  -  added " + added : "")));
     row.append(body);
 
     row.append(
@@ -1096,7 +1104,7 @@ $("s-add-passkey").addEventListener("click", async () => {
   button.disabled = true;
   button.textContent = "Scan the QR code twice...";
   try {
-    state.info = await invoke("passkey_enroll", { label: "Phone passkey" });
+    state.info = await invoke("passkey_enroll", { label: "" });
     renderSlots(state.info.slots);
     toast("This phone can now open the vault");
   } catch (err) {
