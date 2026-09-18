@@ -37,3 +37,6 @@ uuid             = { workspace = true }
 time             = { workspace = true }
 zeroize          = { workspace = true }
 subtle           = { workspace = true }
+
+[target.'cfg(not(target_os = "windows"))'.dev-dependencies]
+tauri = { workspace = true, features = ["test"] }
