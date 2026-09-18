@@ -9,10 +9,10 @@ mod imp;
 mod stub;
 
 #[cfg(target_os = "windows")]
-pub use imp::{api_version, console_window, enroll, prf_secret, transport_name};
+pub use imp::{api_version, console_window, enroll, label_for, prf_secret, transport_name};
 
 #[cfg(not(target_os = "windows"))]
-pub use stub::{api_version, enroll, prf_secret, transport_name};
+pub use stub::{api_version, enroll, label_for, prf_secret, transport_name};
 
 pub const PRF_API_VERSION: u32 = 4;
 

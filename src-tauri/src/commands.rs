@@ -30,6 +30,16 @@ use crate::{
 
 pub const MIN_PASSWORD_LEN: usize = 8;
 
+fn kind_name(kind: SlotKind) -> &'static str {
+    match kind {
+        SlotKind::Password => "password",
+        SlotKind::Recovery => "recovery",
+        SlotKind::Passkey => "passkey",
+        SlotKind::Hardware => "hardware",
+        _ => "other",
+    }
+}
+
 fn unlock_failure(error: &obscura_vault::VaultError) -> UnlockError {
     use obscura_vault::VaultError as E;
     match error {
@@ -98,7 +108,7 @@ fn info(session: &Session, auto_lock_secs: u64) -> VaultInfo {
             .iter()
             .map(|slot| SlotView {
                 id: slot.id,
-                kind: format!("{:?}", slot.kind).to_lowercase(),
+                kind: kind_name(slot.kind).to_owned(),
                 label: slot.label.clone(),
                 created_at: slot
                     .created_at
@@ -1088,11 +1098,7 @@ pub fn passkey_enroll(
 ) -> Result<VaultInfo, String> {
     let secs = state.auto_lock().as_secs();
     let handle = passkey_window(&window)?;
-    let label = if label.trim().is_empty() {
-        "Phone passkey".to_owned()
-    } else {
-        label.trim().to_owned()
-    };
+    let label = label.trim().to_owned();
 
     state.with_session(|session| {
         let vault_id = session.vault.id().to_string();
@@ -1118,7 +1124,15 @@ pub fn passkey_enroll(
 
         session
             .vault
-            .add_identity_slot(SlotKind::Passkey, label, &HybridSecretKey::from_seed(seed))
+            .add_identity_slot(
+                SlotKind::Passkey,
+                if label.is_empty() {
+                    obscura_webauthn::label_for(enrolled.transport).to_owned()
+                } else {
+                    label
+                },
+                &HybridSecretKey::from_seed(seed),
+            )
             .map_err(|e| e.to_string())?;
         let path = session.path.clone();
         persist(&app, session, &path)?;
@@ -1934,5 +1948,24 @@ mod passkey_errors {
     fn anything_else_still_repeats_what_the_platform_said() {
         let error = E::Platform(0x8009_0027);
         assert!(shown(&error).contains(&error.to_string()));
+    }
+}
+
+#[cfg(test)]
+mod slot_kinds {
+    use super::*;
+
+    #[test]
+    fn every_kind_reaches_the_interface_as_a_stable_word() {
+        assert_eq!(kind_name(SlotKind::Password), "password");
+        assert_eq!(kind_name(SlotKind::Recovery), "recovery");
+        assert_eq!(kind_name(SlotKind::Passkey), "passkey");
+        assert_eq!(
+            kind_name(SlotKind::Hardware),
+            "hardware",
+            "the interface decides what to call a slot and which command removes it from \
+             this word, so it cannot be the derived Debug spelling - a variant named in \
+             two words would reach the interface run together and match nothing"
+        );
     }
 }
