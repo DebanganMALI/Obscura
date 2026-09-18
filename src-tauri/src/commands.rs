@@ -106,31 +106,57 @@ fn persist(
     watermark::record(app, &session.vault)
 }
 
+enum Admission {
+    Proceed,
+    Reset,
+    Refuse(UnlockError),
+}
+
+fn admission(
+    verdict: watermark::Verdict,
+    revision: u64,
+    accept_revision: Option<u64>,
+) -> Admission {
+    match verdict {
+        watermark::Verdict::Fresh | watermark::Verdict::Current => Admission::Proceed,
+        watermark::Verdict::Tampered => {
+            if accept_revision == Some(revision) {
+                Admission::Proceed
+            } else {
+                Admission::Refuse(UnlockError::damaged(revision))
+            }
+        }
+        watermark::Verdict::Rollback { found, expected } => {
+            if accept_revision == Some(found) {
+                Admission::Proceed
+            } else {
+                Admission::Refuse(UnlockError::rollback(found, expected))
+            }
+        }
+        watermark::Verdict::Unreadable(detail) => {
+            if accept_revision == Some(revision) {
+                Admission::Reset
+            } else {
+                Admission::Refuse(UnlockError::unreadable(revision, detail))
+            }
+        }
+    }
+}
+
 fn admit(
     app: &tauri::AppHandle,
     vault: &Vault,
     accept_revision: Option<u64>,
 ) -> Result<(), UnlockError> {
-    match watermark::check(app, vault) {
-        watermark::Verdict::Fresh | watermark::Verdict::Current => {}
-        watermark::Verdict::Tampered => {
-            if accept_revision != Some(vault.revision()) {
-                return Err(UnlockError::damaged(vault.revision()));
-            }
-        }
-        watermark::Verdict::Rollback { found, expected } => {
-            if accept_revision != Some(found) {
-                return Err(UnlockError::rollback(found, expected));
-            }
-        }
-        watermark::Verdict::Unreadable(detail) => {
-            if accept_revision != Some(vault.revision()) {
-                return Err(UnlockError::unreadable(vault.revision(), detail));
-            }
-            return watermark::reset_to(app, vault).map_err(UnlockError::message);
-        }
+    match admission(
+        watermark::check(app, vault),
+        vault.revision(),
+        accept_revision,
+    ) {
+        Admission::Refuse(error) => Err(error),
+        Admission::Reset => watermark::reset_to(app, vault).map_err(UnlockError::message),
+        Admission::Proceed => watermark::record(app, vault).map_err(UnlockError::message),
     }
-    watermark::record(app, vault).map_err(UnlockError::message)
 }
 
 #[tauri::command]
@@ -1369,5 +1395,120 @@ mod unlock_and_info {
         assert_eq!(entries.len(), 1);
         assert_eq!(entries[0].title, "GitHub");
         assert_eq!(notes.skipped_blank + notes.skipped_invalid, 0);
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::panic)]
+mod admission_rules {
+    use super::*;
+    use watermark::Verdict;
+
+    const REVISION: u64 = 12;
+
+    fn refusal(admission: Admission) -> String {
+        match admission {
+            Admission::Refuse(error) => serde_json::to_string(&error).unwrap(),
+            Admission::Proceed => panic!("this was let through and should not have been"),
+            Admission::Reset => panic!("this reset the watermark and should not have"),
+        }
+    }
+
+    #[test]
+    fn a_vault_whose_watermark_agrees_opens_without_a_question() {
+        assert!(matches!(
+            admission(Verdict::Fresh, REVISION, None),
+            Admission::Proceed
+        ));
+        assert!(matches!(
+            admission(Verdict::Current, REVISION, None),
+            Admission::Proceed
+        ));
+        assert!(matches!(
+            admission(Verdict::Current, REVISION, Some(999)),
+            Admission::Proceed
+        ));
+    }
+
+    #[test]
+    fn a_rolled_back_vault_is_refused_until_the_revision_on_disk_is_confirmed() {
+        let told = refusal(admission(
+            Verdict::Rollback {
+                found: 9,
+                expected: REVISION,
+            },
+            9,
+            None,
+        ));
+        assert!(told.contains('9'), "{told}");
+        assert!(told.contains("12"), "{told}");
+
+        assert!(
+            matches!(
+                admission(
+                    Verdict::Rollback {
+                        found: 9,
+                        expected: REVISION
+                    },
+                    9,
+                    Some(9)
+                ),
+                Admission::Proceed
+            ),
+            "confirming the revision found on disk is what lets a rollback through"
+        );
+
+        assert!(
+            !matches!(
+                admission(
+                    Verdict::Rollback {
+                        found: 9,
+                        expected: REVISION
+                    },
+                    9,
+                    Some(REVISION)
+                ),
+                Admission::Proceed
+            ),
+            "the expected revision is not the one the interface was shown, so confirming it \
+             must not open a rolled-back vault"
+        );
+    }
+
+    #[test]
+    fn a_tampered_watermark_is_refused_until_this_revision_is_confirmed() {
+        let told = refusal(admission(Verdict::Tampered, REVISION, None));
+        assert!(told.contains("12"), "{told}");
+
+        assert!(matches!(
+            admission(Verdict::Tampered, REVISION, Some(REVISION)),
+            Admission::Proceed
+        ));
+        assert!(!matches!(
+            admission(Verdict::Tampered, REVISION, Some(11)),
+            Admission::Proceed
+        ));
+    }
+
+    #[test]
+    fn an_unreadable_watermark_is_rewritten_only_once_the_user_has_agreed() {
+        let told = refusal(admission(
+            Verdict::Unreadable("the book is not valid json".to_owned()),
+            REVISION,
+            None,
+        ));
+        assert!(told.contains("the book is not valid json"), "{told}");
+
+        assert!(
+            matches!(
+                admission(
+                    Verdict::Unreadable("the book is not valid json".to_owned()),
+                    REVISION,
+                    Some(REVISION)
+                ),
+                Admission::Reset
+            ),
+            "an unreadable book is replaced rather than appended to, and only on agreement"
+        );
     }
 }
