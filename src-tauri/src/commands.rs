@@ -490,11 +490,7 @@ pub fn set_master_password(
     password: String,
 ) -> Result<VaultInfo, String> {
     let password = Zeroizing::new(password);
-    if password.len() < MIN_PASSWORD_LEN {
-        return Err(format!(
-            "the master password must be at least {MIN_PASSWORD_LEN} characters"
-        ));
-    }
+    check_new_password(password.as_str(), "master password")?;
     let secs = state.auto_lock().as_secs();
 
     state.with_session(|session| {
@@ -518,11 +514,7 @@ pub fn change_master_password(
     let current = Zeroizing::new(current);
     let new = Zeroizing::new(new);
 
-    if new.len() < MIN_PASSWORD_LEN {
-        return Err(format!(
-            "the new password must be at least {MIN_PASSWORD_LEN} characters"
-        ));
-    }
+    check_new_password(new.as_str(), "new password")?;
 
     state.with_session(|session| {
         if !session
@@ -541,6 +533,75 @@ pub fn change_master_password(
         persist(&app, session, &path)?;
         Ok(())
     })
+}
+
+fn check_new_password(password: &str, label: &str) -> Result<(), String> {
+    if password.len() < MIN_PASSWORD_LEN {
+        return Err(format!(
+            "the {label} must be at least {MIN_PASSWORD_LEN} characters"
+        ));
+    }
+    Ok(())
+}
+
+fn check_destination(target: &std::path::Path) -> Result<(), String> {
+    if target.as_os_str().is_empty() {
+        return Err("choose a destination first".to_owned());
+    }
+    if target.exists() {
+        return Err("something already exists at that location".to_owned());
+    }
+    match target.parent() {
+        Some(parent) if parent.is_dir() => Ok(()),
+        Some(parent) => Err(format!(
+            "the folder {} does not exist - mount the disk or volume first",
+            parent.display()
+        )),
+        None => Err("that is not a valid file path".to_owned()),
+    }
+}
+
+enum TargetState {
+    Missing,
+    Vault,
+    Foreign,
+}
+
+impl TargetState {
+    const fn of(exists: bool, is_vault: bool) -> Self {
+        if !exists {
+            Self::Missing
+        } else if is_vault {
+            Self::Vault
+        } else {
+            Self::Foreign
+        }
+    }
+}
+
+fn warning_for(
+    state: TargetState,
+    parent_exists: bool,
+    writable: bool,
+    synced: bool,
+) -> Option<String> {
+    if matches!(state, TargetState::Foreign) {
+        Some("There is a file here, but it is not an Obscura vault.".to_owned())
+    } else if !parent_exists {
+        Some(
+            "That folder is not available. If the vault lives on an encrypted volume or a removable disk, mount it first."
+                .to_owned(),
+        )
+    } else if !writable {
+        Some("Obscura cannot write to that folder.".to_owned())
+    } else if synced {
+        Some(
+            "That folder looks like a syncing cloud drive. Sync clients can restore an older copy of a file, which for a vault means silently undoing password changes."
+                .to_owned(),
+        )
+    } else {
+        None
+    }
 }
 
 #[tauri::command]
@@ -562,23 +623,12 @@ pub fn probe_location(
     };
     let is_vault = exists && location::is_vault_file(&target);
 
-    let warning = if exists && !is_vault {
-        Some("There is a file here, but it is not an Obscura vault.".to_owned())
-    } else if !parent_exists {
-        Some(
-            "That folder is not available. If the vault lives on an encrypted volume or a removable disk, mount it first."
-                .to_owned(),
-        )
-    } else if !writable {
-        Some("Obscura cannot write to that folder.".to_owned())
-    } else if location::looks_synced(&target) {
-        Some(
-            "That folder looks like a syncing cloud drive. Sync clients can restore an older copy of a file, which for a vault means silently undoing password changes."
-                .to_owned(),
-        )
-    } else {
-        None
-    };
+    let warning = warning_for(
+        TargetState::of(exists, is_vault),
+        parent_exists,
+        writable,
+        location::looks_synced(&target),
+    );
 
     Ok(LocationProbe {
         path: target.display().to_string(),
@@ -728,22 +778,7 @@ pub fn relocate_vault(
     remember: Option<bool>,
 ) -> Result<RelocateResult, String> {
     let target = PathBuf::from(destination.trim());
-    if target.as_os_str().is_empty() {
-        return Err("choose a destination first".to_owned());
-    }
-    if target.exists() {
-        return Err("something already exists at that location".to_owned());
-    }
-    match target.parent() {
-        Some(parent) if parent.is_dir() => {}
-        Some(parent) => {
-            return Err(format!(
-                "the folder {} does not exist - mount the disk or volume first",
-                parent.display()
-            ))
-        }
-        None => return Err("that is not a valid file path".to_owned()),
-    }
+    check_destination(&target)?;
 
     let secs = state.auto_lock().as_secs();
     let (result, previous) = state.with_session(|session| {
@@ -1131,5 +1166,105 @@ mod session_reads {
         assert_eq!(made.password.chars().count(), 24);
         assert!(made.entropy_bits > 0.0);
         assert!(generate(0, true, true, true, true, false, true).is_err());
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::indexing_slicing)]
+mod plain_parts {
+    use super::*;
+
+    #[test]
+    fn a_file_that_is_neither_an_export_nor_a_csv_names_both_attempts() {
+        let error = read_import(b"this is not a vault and not a table").unwrap_err();
+        assert!(error.contains("As an Obscura export"), "{error}");
+        assert!(error.contains("As a CSV"), "{error}");
+        assert!(read_import(b"").is_err());
+    }
+
+    #[test]
+    fn a_csv_is_read_once_the_export_reader_has_refused_it() {
+        let (label, entries, notes) =
+            read_import(b"name,login_username,login_password\nGitHub,saheb,hunter2\n").unwrap();
+
+        assert!(
+            label.to_lowercase().contains("bitwarden"),
+            "the import report would name the wrong source: {label}"
+        );
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].title, "GitHub");
+        assert_eq!(notes.skipped_blank + notes.skipped_invalid, 0);
+    }
+
+    #[test]
+    fn a_file_here_that_is_not_a_vault_outranks_every_other_warning() {
+        let warning = warning_for(TargetState::Foreign, false, false, true).unwrap();
+        assert!(warning.contains("not an Obscura vault"), "{warning}");
+    }
+
+    #[test]
+    fn a_missing_folder_is_reported_before_an_unwritable_one() {
+        assert!(warning_for(TargetState::Missing, false, false, false)
+            .unwrap()
+            .contains("not available"));
+        assert!(warning_for(TargetState::Missing, true, false, false)
+            .unwrap()
+            .contains("cannot write"));
+    }
+
+    #[test]
+    fn a_syncing_folder_is_flagged_even_when_nothing_else_is_wrong() {
+        let warning = warning_for(TargetState::Vault, true, true, true).unwrap();
+        assert!(warning.contains("cloud drive"), "{warning}");
+        assert!(warning_for(TargetState::Vault, true, true, false).is_none());
+        assert!(warning_for(TargetState::Missing, true, true, false).is_none());
+    }
+
+    #[test]
+    fn a_relocation_target_must_be_named_free_and_inside_a_folder_that_exists() {
+        assert!(check_destination(std::path::Path::new("")).is_err());
+
+        let dir = std::env::temp_dir().join(format!("obscura-relocate-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+
+        let free = dir.join("moved.obscura");
+        assert!(check_destination(&free).is_ok());
+
+        std::fs::write(&free, b"not a vault").unwrap();
+        assert!(
+            check_destination(&free).is_err(),
+            "relocating must never write over a file that is already there"
+        );
+
+        assert!(check_destination(&dir.join("absent").join("moved.obscura"))
+            .unwrap_err()
+            .contains("does not exist"));
+
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn a_new_master_password_is_measured_and_the_message_says_which_one() {
+        let short = "a".repeat(MIN_PASSWORD_LEN - 1);
+        let long = "a".repeat(MIN_PASSWORD_LEN);
+
+        let error = check_new_password(&short, "master password").unwrap_err();
+        assert!(error.contains("master password"), "{error}");
+        assert!(error.contains(&MIN_PASSWORD_LEN.to_string()), "{error}");
+
+        assert!(check_new_password(&short, "new password")
+            .unwrap_err()
+            .contains("new password"));
+        assert!(check_new_password(&long, "master password").is_ok());
+    }
+    #[test]
+    fn a_file_that_is_not_a_vault_is_told_apart_from_no_file_at_all() {
+        assert!(matches!(
+            TargetState::of(false, false),
+            TargetState::Missing
+        ));
+        assert!(matches!(TargetState::of(true, true), TargetState::Vault));
+        assert!(matches!(TargetState::of(true, false), TargetState::Foreign));
     }
 }
