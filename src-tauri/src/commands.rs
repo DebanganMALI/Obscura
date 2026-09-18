@@ -667,7 +667,15 @@ fn warning_for(
                 .to_owned(),
         )
     } else if !writable {
-        Some("Obscura cannot write to that folder.".to_owned())
+        Some(match state {
+            TargetState::Vault => {
+                "That vault is read-only, so Obscura can open it but cannot save changes."
+                    .to_owned()
+            }
+            TargetState::Missing | TargetState::Foreign => {
+                "Obscura cannot write to that folder.".to_owned()
+            }
+        })
     } else if synced {
         Some(
             "That folder looks like a syncing cloud drive. Sync clients can restore an older copy of a file, which for a vault means silently undoing password changes."
@@ -690,11 +698,8 @@ pub fn probe_location<R: tauri::Runtime>(
 
     let exists = target.is_file();
     let parent_exists = target.parent().is_some_and(std::path::Path::is_dir);
-    let writable = if exists {
-        true
-    } else {
-        location::parent_writable(&target)
-    };
+    let writable =
+        location::parent_writable(&target) && (!exists || location::file_writable(&target));
     let is_vault = exists && location::is_vault_file(&target);
 
     let warning = warning_for(
@@ -2264,5 +2269,25 @@ mod wiring {
             Some(900),
             "the setting reaches the settings file, or it would be forgotten on the next launch"
         );
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod read_only {
+    use super::*;
+
+    #[test]
+    fn a_read_only_vault_says_so_rather_than_blaming_the_folder() {
+        let vault = warning_for(TargetState::Vault, true, false, false).unwrap();
+        assert!(vault.contains("read-only"), "{vault}");
+        assert!(
+            !vault.contains("folder"),
+            "the folder is writable in this case - saying otherwise sends the user to \
+             fix the wrong thing: {vault}"
+        );
+
+        let missing = warning_for(TargetState::Missing, true, false, false).unwrap();
+        assert!(missing.contains("folder"), "{missing}");
     }
 }
