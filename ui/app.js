@@ -142,6 +142,7 @@ let gatePath = null;
 let gateProbe = null;
 let gateBlocked = false;
 let gateRecoveryMode = false;
+let helloAvailable = false;
 
 async function refreshGate() {
   try {
@@ -194,6 +195,7 @@ function applyGateMode() {
   }
 
   $("gate-use-recovery").hidden = creating;
+  $("gate-use-hello").hidden = creating || !helloAvailable;
   if (creating) gateRecoveryMode = false;
 
   $("gate-eyebrow").textContent = creating ? "First run" : "Vault locked";
@@ -229,6 +231,56 @@ $("gate-use-recovery").addEventListener("click", () => {
   $("gate-error").textContent = "";
   openRecoveryUnlock();
 });
+
+$("gate-use-hello").addEventListener("click", async () => {
+  const error = $("gate-error");
+  const button = $("gate-use-hello");
+  error.textContent = "";
+  button.disabled = true;
+  button.textContent = "Waiting for Windows Hello...";
+
+  const args = {
+    path: gateProbe ? gateProbe.path : null,
+    remember: $("loc-remember").checked,
+  };
+
+  try {
+    let info;
+    try {
+      info = await invoke("unlock_with_hello", args);
+    } catch (err) {
+      if (!err || !err.confirm) throw err;
+      const accepted = await confirmRevision(err);
+      if (accepted === null) {
+        error.textContent = "Left as it is. Nothing was opened or changed.";
+        return;
+      }
+      args.acceptRevision = accepted;
+      info = await invoke("unlock_with_hello", args);
+    }
+    state.info = info;
+    $("gate-password").value = "";
+    enterApp();
+    if (!hasRecoverySlot()) await openRecovery(true);
+  } catch (err) {
+    error.textContent = errText(err);
+  } finally {
+    button.disabled = false;
+    button.textContent = "Unlock with Windows Hello";
+  }
+});
+
+(async () => {
+  try {
+    helloAvailable = await invoke("hello_available");
+  } catch (err) {
+    helloAvailable = false;
+  }
+  if (!helloAvailable) {
+    $("gate-use-hello").hidden = true;
+    $("s-add-hello").hidden = true;
+  }
+})();
 
 $("loc-change").addEventListener("click", () =>
   chooseLocation(gateMode === "unlock" ? "pick_existing_vault" : "pick_new_location"));
@@ -951,7 +1003,8 @@ async function removeSlot(slot) {
     return;
   }
   try {
-    state.info = await invoke("remove_slot", { id: slot.id });
+    const command = slot.kind === "hardware" ? "hello_forget" : "remove_slot";
+    state.info = await invoke(command, { id: slot.id });
     renderSlots(state.info.slots);
     toast(slot.label + " removed");
   } catch (err) {
@@ -962,6 +1015,22 @@ async function removeSlot(slot) {
 $("s-add-recovery").addEventListener("click", async () => {
   $("s-slots-error").textContent = "";
   await openRecovery(false);
+});
+
+$("s-add-hello").addEventListener("click", async () => {
+  const error = $("s-slots-error");
+  const button = $("s-add-hello");
+  error.textContent = "";
+  button.disabled = true;
+  try {
+    state.info = await invoke("hello_enroll", { label: "Windows Hello" });
+    renderSlots(state.info.slots);
+    toast("Windows Hello is set up on this PC");
+  } catch (err) {
+    error.textContent = String(err);
+  } finally {
+    button.disabled = false;
+  }
 });
 
 $("s-export").addEventListener("click", () => {
