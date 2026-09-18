@@ -277,3 +277,26 @@ mod wrapped_key_bounds {
         );
     }
 }
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod redaction {
+    use super::*;
+
+    #[test]
+    fn a_secret_key_says_it_is_redacted_rather_than_printing_nothing() {
+        let identity = HybridSecretKey::from_seed(SecretBytes::zeroed());
+        let shown = format!("{identity:?}");
+        assert!(shown.contains("redacted"));
+    }
+
+    #[test]
+    fn the_public_halves_describe_themselves_rather_than_printing_nothing() {
+        let identity = HybridSecretKey::from_seed(SecretBytes::zeroed());
+        let public = identity.public_key().unwrap();
+        let ciphertext = HybridCiphertext::from_bytes(&[0u8; CIPHERTEXT_LEN]).unwrap();
+
+        assert!(!format!("{public:?}").is_empty());
+        assert!(!format!("{ciphertext:?}").is_empty());
+    }
+}
