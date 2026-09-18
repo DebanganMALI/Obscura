@@ -54,8 +54,12 @@ pub fn api_version() -> u32 {
 }
 
 #[must_use]
-pub fn console_window() -> HWND {
-    unsafe { GetConsoleWindow() }
+pub fn console_window() -> isize {
+    unsafe { GetConsoleWindow() }.0 as isize
+}
+
+fn window_handle(window: isize) -> HWND {
+    HWND(window as *mut core::ffi::c_void)
 }
 
 #[must_use]
@@ -76,7 +80,7 @@ pub fn salt_for(vault_id: &str) -> Result<[u8; 32], WebAuthnError> {
 }
 
 pub fn enroll(
-    hwnd: HWND,
+    window: isize,
     rp_id: &str,
     rp_name: &str,
     user_name: &str,
@@ -139,7 +143,7 @@ pub fn enroll(
 
     let attestation = unsafe {
         WebAuthNAuthenticatorMakeCredential(
-            hwnd,
+            window_handle(window),
             &raw const rp,
             &raw const user,
             &raw const cose,
@@ -171,7 +175,7 @@ pub fn enroll(
 }
 
 pub fn prf_secret(
-    hwnd: HWND,
+    window: isize,
     rp_id: &str,
     salt: &[u8; 32],
 ) -> Result<SecretBytes<32>, WebAuthnError> {
@@ -211,7 +215,7 @@ pub fn prf_secret(
 
     let assertion = unsafe {
         WebAuthNAuthenticatorGetAssertion(
-            hwnd,
+            window_handle(window),
             PCWSTR(rp_id_w.as_ptr()),
             &raw const client,
             Some(&raw const options),

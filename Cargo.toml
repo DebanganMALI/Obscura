@@ -45,6 +45,7 @@ arboard     = { version = "3", default-features = false }
 obscura-crypto   = { path = "crates/obscura-crypto",   version = "0.1.0" }
 obscura-vault    = { path = "crates/obscura-vault",    version = "0.1.0" }
 obscura-platform = { path = "crates/obscura-platform", version = "0.1.0" }
+obscura-webauthn = { path = "crates/obscura-webauthn", version = "0.1.0" }
 
 [workspace.lints.rust]
 unsafe_code           = "warn"
