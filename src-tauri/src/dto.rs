@@ -225,3 +225,75 @@ impl UnlockError {
         }
     }
 }
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
+mod tests {
+    use super::*;
+    use obscura_vault::{CustomField, SecretString};
+
+    fn an_entry() -> Entry {
+        let mut entry = Entry::new_login("GitHub", "saheb");
+        entry.password = SecretString::from("correct-horse-battery-staple");
+        entry.notes = SecretString::from("a private note");
+        entry.urls = vec!["https://github.com".to_owned()];
+        entry.tags = vec!["work".to_owned()];
+        entry.custom_fields = vec![CustomField {
+            name: "recovery".to_owned(),
+            value: SecretString::from("a hidden value"),
+            hidden: true,
+        }];
+        entry
+    }
+
+    #[test]
+    fn a_summary_carries_what_the_list_needs() {
+        let entry = an_entry();
+        let summary = EntrySummary::from(&entry);
+
+        assert_eq!(summary.id, entry.id);
+        assert_eq!(summary.title, "GitHub");
+        assert_eq!(summary.username, "saheb");
+        assert_eq!(summary.url.as_deref(), Some("https://github.com"));
+        assert_eq!(summary.tags, vec!["work".to_owned()]);
+        assert!(!summary.has_totp);
+        assert!(!summary.favorite);
+    }
+
+    #[test]
+    fn a_summary_never_serialises_a_secret() {
+        let json = serde_json::to_string(&EntrySummary::from(&an_entry())).unwrap();
+
+        assert!(!json.contains("correct-horse-battery-staple"));
+        assert!(!json.contains("a private note"));
+        assert!(!json.contains("a hidden value"));
+    }
+
+    #[test]
+    fn an_unlock_error_asks_for_confirmation_only_when_it_should() {
+        let plain = UnlockError::message("nope");
+        assert_eq!(plain.message, "nope");
+        assert!(plain.confirm.is_none());
+
+        let rollback = UnlockError::rollback(4, 9);
+        let confirm = rollback.confirm.expect("a rollback is confirmable");
+        assert_eq!(confirm.reason, "rollback");
+        assert_eq!(confirm.found, 4);
+        assert_eq!(confirm.expected, Some(9));
+
+        let damaged = UnlockError::damaged(7);
+        let confirm = damaged.confirm.expect("a damaged record is confirmable");
+        assert_eq!(confirm.reason, "damaged");
+        assert_eq!(confirm.found, 7);
+        assert_eq!(confirm.expected, None);
+
+        let unreadable = UnlockError::unreadable(3, "the disk is on fire");
+        let confirm = unreadable
+            .confirm
+            .expect("an unreadable record is confirmable");
+        assert_eq!(confirm.reason, "unreadable");
+        assert_eq!(confirm.found, 3);
+        assert_eq!(confirm.expected, None);
+        assert!(unreadable.message.contains("the disk is on fire"));
+    }
+}
