@@ -31,7 +31,7 @@ pub fn copy_with_timeout(value: Zeroizing<String>, clear_after: u64) -> Result<(
 
     place(&mut clipboard, value.as_str()).map_err(|e| format!("could not copy: {e}"))?;
 
-    let delay = clear_after.clamp(1, MAX_CLEAR_DELAY);
+    let delay = clear_delay(clear_after);
     let expected = value;
 
     thread::spawn(move || {
@@ -48,4 +48,25 @@ pub fn copy_with_timeout(value: Zeroizing<String>, clear_after: u64) -> Result<(
     });
 
     Ok(())
+}
+
+#[must_use]
+pub fn clear_delay(requested: u64) -> u64 {
+    requested.clamp(1, MAX_CLEAR_DELAY)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_clear_delay_is_kept_inside_its_bounds() {
+        assert_eq!(MAX_CLEAR_DELAY, 120);
+        assert_eq!(clear_delay(0), 1);
+        assert_eq!(clear_delay(1), 1);
+        assert_eq!(clear_delay(30), 30);
+        assert_eq!(clear_delay(MAX_CLEAR_DELAY), MAX_CLEAR_DELAY);
+        assert_eq!(clear_delay(MAX_CLEAR_DELAY + 1), MAX_CLEAR_DELAY);
+        assert_eq!(clear_delay(u64::MAX), MAX_CLEAR_DELAY);
+    }
 }
