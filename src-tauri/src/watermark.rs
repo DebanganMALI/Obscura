@@ -33,7 +33,7 @@ pub enum Verdict {
     Unreadable(String),
 }
 
-fn config_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+fn config_dir<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> Result<PathBuf, String> {
     let dir = app
         .path()
         .app_config_dir()
@@ -103,7 +103,7 @@ fn entry_for(vault: &Vault) -> Result<Record, String> {
     })
 }
 
-pub fn check(app: &tauri::AppHandle, vault: &Vault) -> Verdict {
+pub fn check<R: tauri::Runtime>(app: &tauri::AppHandle<R>, vault: &Vault) -> Verdict {
     match config_dir(app) {
         Ok(dir) => check_in(&dir, vault),
         Err(reason) => Verdict::Unreadable(reason),
@@ -136,7 +136,7 @@ pub fn check_in(dir: &Path, vault: &Vault) -> Verdict {
     Verdict::Current
 }
 
-pub fn record(app: &tauri::AppHandle, vault: &Vault) -> Result<(), String> {
+pub fn record<R: tauri::Runtime>(app: &tauri::AppHandle<R>, vault: &Vault) -> Result<(), String> {
     record_in(&config_dir(app)?, vault)
 }
 
@@ -146,7 +146,7 @@ pub fn record_in(dir: &Path, vault: &Vault) -> Result<(), String> {
     write_book(dir, &book)
 }
 
-pub fn reset_to(app: &tauri::AppHandle, vault: &Vault) -> Result<(), String> {
+pub fn reset_to<R: tauri::Runtime>(app: &tauri::AppHandle<R>, vault: &Vault) -> Result<(), String> {
     reset_to_in(&config_dir(app)?, vault)
 }
 

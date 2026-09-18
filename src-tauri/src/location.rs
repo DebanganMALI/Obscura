@@ -33,7 +33,7 @@ struct Stored {
     auto_lock_secs: Option<u64>,
 }
 
-fn pointer_file(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+fn pointer_file<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> Result<PathBuf, String> {
     let dir = app
         .path()
         .app_config_dir()
@@ -56,7 +56,7 @@ fn save_to(file: &Path, stored: &Stored) -> Result<(), String> {
 }
 
 #[must_use]
-pub fn remembered(app: &tauri::AppHandle) -> Option<PathBuf> {
+pub fn remembered<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> Option<PathBuf> {
     pointer_file(app).ok().and_then(|file| remembered_in(&file))
 }
 
@@ -68,7 +68,7 @@ pub fn remembered_in(file: &Path) -> Option<PathBuf> {
         .map(PathBuf::from)
 }
 
-pub fn remember(app: &tauri::AppHandle, path: &Path) -> Result<(), String> {
+pub fn remember<R: tauri::Runtime>(app: &tauri::AppHandle<R>, path: &Path) -> Result<(), String> {
     remember_in(&pointer_file(app)?, path)
 }
 
@@ -78,7 +78,7 @@ pub fn remember_in(file: &Path, path: &Path) -> Result<(), String> {
     save_to(file, &stored)
 }
 
-pub fn forget(app: &tauri::AppHandle) -> Result<(), String> {
+pub fn forget<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> Result<(), String> {
     forget_in(&pointer_file(app)?)
 }
 
@@ -89,7 +89,7 @@ pub fn forget_in(file: &Path) -> Result<(), String> {
 }
 
 #[must_use]
-pub fn remembered_auto_lock(app: &tauri::AppHandle) -> Option<u64> {
+pub fn remembered_auto_lock<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> Option<u64> {
     pointer_file(app)
         .ok()
         .and_then(|file| remembered_auto_lock_in(&file))
@@ -100,7 +100,10 @@ pub fn remembered_auto_lock_in(file: &Path) -> Option<u64> {
     load_from(file).auto_lock_secs
 }
 
-pub fn remember_auto_lock(app: &tauri::AppHandle, seconds: u64) -> Result<(), String> {
+pub fn remember_auto_lock<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    seconds: u64,
+) -> Result<(), String> {
     remember_auto_lock_in(&pointer_file(app)?, seconds)
 }
 

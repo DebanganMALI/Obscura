@@ -77,7 +77,7 @@ pub fn run() {
         .expect("Obscura could not start: the platform webview is unavailable");
 }
 
-fn spawn_auto_lock_clock(app: tauri::AppHandle) {
+fn spawn_auto_lock_clock<R: tauri::Runtime>(app: tauri::AppHandle<R>) {
     thread::spawn(move || loop {
         thread::sleep(Duration::from_secs(1));
         let state = app.state::<AppState>();

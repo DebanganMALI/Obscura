@@ -70,7 +70,7 @@ fn hello_failure(error: &obscura_platform::PlatformError) -> UnlockError {
         other => UnlockError::message(other.to_string()),
     }
 }
-fn default_vault_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+fn default_vault_path<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> Result<PathBuf, String> {
     let dir = app
         .path()
         .app_data_dir()
@@ -79,7 +79,10 @@ fn default_vault_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     Ok(dir.join("obscura.obscura"))
 }
 
-fn resolve(app: &tauri::AppHandle, path: Option<String>) -> Result<PathBuf, String> {
+fn resolve<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    path: Option<String>,
+) -> Result<PathBuf, String> {
     if let Some(chosen) = path.filter(|p| !p.trim().is_empty()) {
         return Ok(PathBuf::from(chosen.trim()));
     }
@@ -89,7 +92,11 @@ fn resolve(app: &tauri::AppHandle, path: Option<String>) -> Result<PathBuf, Stri
     default_vault_path(app)
 }
 
-fn apply_remember(app: &tauri::AppHandle, path: &std::path::Path, remember: Option<bool>) {
+fn apply_remember<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    path: &std::path::Path,
+    remember: Option<bool>,
+) {
     if remember.unwrap_or(true) {
         let _ = location::remember(app, path);
     } else {
@@ -126,8 +133,8 @@ fn info(session: &Session, auto_lock_secs: u64) -> VaultInfo {
     }
 }
 
-fn persist(
-    app: &tauri::AppHandle,
+fn persist<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
     session: &mut Session,
     path: &std::path::Path,
 ) -> Result<(), String> {
@@ -173,8 +180,8 @@ fn admission(
     }
 }
 
-fn admit(
-    app: &tauri::AppHandle,
+fn admit<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
     vault: &Vault,
     accept_revision: Option<u64>,
 ) -> Result<(), UnlockError> {
@@ -190,12 +197,15 @@ fn admit(
 }
 
 #[tauri::command]
-pub fn vault_exists(app: tauri::AppHandle, path: Option<String>) -> Result<bool, String> {
+pub fn vault_exists<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
+    path: Option<String>,
+) -> Result<bool, String> {
     Ok(resolve(&app, path)?.exists())
 }
 
 #[tauri::command]
-pub fn default_path(app: tauri::AppHandle) -> Result<String, String> {
+pub fn default_path<R: tauri::Runtime>(app: tauri::AppHandle<R>) -> Result<String, String> {
     Ok(default_vault_path(&app)?.display().to_string())
 }
 
@@ -224,8 +234,8 @@ fn check_new_vault_location(target: &std::path::Path) -> Result<(), String> {
 }
 
 #[tauri::command(async)]
-pub fn create_vault(
-    app: tauri::AppHandle,
+pub fn create_vault<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
     state: State<'_, AppState>,
     path: Option<String>,
     password: String,
@@ -253,8 +263,8 @@ pub fn create_vault(
 }
 
 #[tauri::command(async)]
-pub fn unlock(
-    app: tauri::AppHandle,
+pub fn unlock<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
     state: State<'_, AppState>,
     path: Option<String>,
     password: String,
@@ -311,7 +321,11 @@ pub fn vault_info(state: State<'_, AppState>) -> Result<VaultInfo, String> {
 }
 
 #[tauri::command]
-pub fn set_auto_lock(app: tauri::AppHandle, state: State<'_, AppState>, seconds: u64) -> u64 {
+pub fn set_auto_lock<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
+    state: State<'_, AppState>,
+    seconds: u64,
+) -> u64 {
     state.set_auto_lock(Duration::from_secs(seconds));
     let applied = state.auto_lock().as_secs();
     let _ = location::remember_auto_lock(&app, applied);
@@ -423,8 +437,8 @@ fn store(session: &mut Session, input: &EntryInput) -> Result<Uuid, String> {
 }
 
 #[tauri::command]
-pub fn save_entry(
-    app: tauri::AppHandle,
+pub fn save_entry<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
     state: State<'_, AppState>,
     input: EntryInput,
 ) -> Result<Uuid, String> {
@@ -487,8 +501,8 @@ fn apply(entry: &mut Entry, input: &EntryInput) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub fn delete_entry(
-    app: tauri::AppHandle,
+pub fn delete_entry<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
     state: State<'_, AppState>,
     id: Uuid,
 ) -> Result<(), String> {
@@ -544,8 +558,8 @@ pub fn generate(
 }
 
 #[tauri::command(async)]
-pub fn set_master_password(
-    app: tauri::AppHandle,
+pub fn set_master_password<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
     state: State<'_, AppState>,
     password: String,
 ) -> Result<VaultInfo, String> {
@@ -565,8 +579,8 @@ pub fn set_master_password(
 }
 
 #[tauri::command(async)]
-pub fn change_master_password(
-    app: tauri::AppHandle,
+pub fn change_master_password<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
     state: State<'_, AppState>,
     current: String,
     new: String,
@@ -665,8 +679,8 @@ fn warning_for(
 }
 
 #[tauri::command]
-pub fn probe_location(
-    app: tauri::AppHandle,
+pub fn probe_location<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
     path: Option<String>,
 ) -> Result<LocationProbe, String> {
     let explicit = path.as_ref().is_some_and(|p| !p.trim().is_empty());
@@ -706,17 +720,21 @@ pub fn probe_location(
 }
 
 #[tauri::command]
-pub fn remembered_location(app: tauri::AppHandle) -> Result<Option<String>, String> {
+pub fn remembered_location<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
+) -> Result<Option<String>, String> {
     Ok(location::remembered(&app).map(|p| p.display().to_string()))
 }
 
 #[tauri::command]
-pub fn forget_location(app: tauri::AppHandle) -> Result<(), String> {
+pub fn forget_location<R: tauri::Runtime>(app: tauri::AppHandle<R>) -> Result<(), String> {
     location::forget(&app)
 }
 
 #[tauri::command(async)]
-pub fn pick_new_location(app: tauri::AppHandle) -> Result<Option<String>, String> {
+pub fn pick_new_location<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
+) -> Result<Option<String>, String> {
     let start = default_vault_path(&app)?;
     let chosen = app
         .dialog()
@@ -732,7 +750,9 @@ pub fn pick_new_location(app: tauri::AppHandle) -> Result<Option<String>, String
 }
 
 #[tauri::command(async)]
-pub fn pick_existing_vault(app: tauri::AppHandle) -> Result<Option<String>, String> {
+pub fn pick_existing_vault<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
+) -> Result<Option<String>, String> {
     let start = resolve(&app, None)?;
     let chosen = app
         .dialog()
@@ -747,8 +767,8 @@ pub fn pick_existing_vault(app: tauri::AppHandle) -> Result<Option<String>, Stri
 }
 
 #[tauri::command(async)]
-pub fn export_entries(
-    app: tauri::AppHandle,
+pub fn export_entries<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
     state: State<'_, AppState>,
 ) -> Result<Option<ExportResult>, String> {
     let today = time::OffsetDateTime::now_utc().date();
@@ -774,8 +794,8 @@ pub fn export_entries(
 }
 
 #[tauri::command(async)]
-pub fn import_entries(
-    app: tauri::AppHandle,
+pub fn import_entries<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
     state: State<'_, AppState>,
 ) -> Result<Option<ImportResult>, String> {
     let Some(chosen) = app
@@ -831,8 +851,8 @@ fn read_import(bytes: &[u8]) -> Result<(String, Vec<Entry>, csv_import::CsvNotes
 }
 
 #[tauri::command(async)]
-pub fn relocate_vault(
-    app: tauri::AppHandle,
+pub fn relocate_vault<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
     state: State<'_, AppState>,
     destination: String,
     remember: Option<bool>,
@@ -892,8 +912,8 @@ pub fn create_recovery_code(
 }
 
 #[tauri::command(async)]
-pub fn confirm_recovery_code(
-    app: tauri::AppHandle,
+pub fn confirm_recovery_code<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
     state: State<'_, AppState>,
     code: String,
 ) -> Result<VaultInfo, String> {
@@ -925,8 +945,8 @@ pub fn discard_recovery_code(state: State<'_, AppState>, id: Uuid) -> Result<Vau
 }
 
 #[tauri::command(async)]
-pub fn unlock_with_recovery(
-    app: tauri::AppHandle,
+pub fn unlock_with_recovery<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
     state: State<'_, AppState>,
     path: Option<String>,
     code: String,
@@ -956,8 +976,8 @@ pub fn unlock_with_recovery(
 }
 
 #[tauri::command]
-pub fn remove_slot(
-    app: tauri::AppHandle,
+pub fn remove_slot<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
     state: State<'_, AppState>,
     id: Uuid,
 ) -> Result<VaultInfo, String> {
@@ -976,8 +996,8 @@ pub fn hello_available() -> Result<bool, String> {
 }
 
 #[tauri::command(async)]
-pub fn hello_enroll(
-    app: tauri::AppHandle,
+pub fn hello_enroll<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
     state: State<'_, AppState>,
     label: String,
 ) -> Result<VaultInfo, String> {
@@ -1002,8 +1022,8 @@ pub fn hello_enroll(
 }
 
 #[tauri::command(async)]
-pub fn hello_forget(
-    app: tauri::AppHandle,
+pub fn hello_forget<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
     state: State<'_, AppState>,
     id: Uuid,
 ) -> Result<VaultInfo, String> {
@@ -1019,8 +1039,8 @@ pub fn hello_forget(
 }
 
 #[tauri::command(async)]
-pub fn unlock_with_hello(
-    app: tauri::AppHandle,
+pub fn unlock_with_hello<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
     state: State<'_, AppState>,
     path: Option<String>,
     remember: Option<bool>,
@@ -1058,7 +1078,7 @@ pub fn unlock_with_hello(
 }
 
 #[cfg(target_os = "windows")]
-fn passkey_window(window: &tauri::WebviewWindow) -> Result<isize, String> {
+fn passkey_window<R: tauri::Runtime>(window: &tauri::WebviewWindow<R>) -> Result<isize, String> {
     window
         .hwnd()
         .map(|handle| handle.0 as isize)
@@ -1066,7 +1086,7 @@ fn passkey_window(window: &tauri::WebviewWindow) -> Result<isize, String> {
 }
 
 #[cfg(not(target_os = "windows"))]
-fn passkey_window(_window: &tauri::WebviewWindow) -> Result<isize, String> {
+fn passkey_window<R: tauri::Runtime>(_window: &tauri::WebviewWindow<R>) -> Result<isize, String> {
     Err("passkeys need Windows in this build of Obscura".to_owned())
 }
 
@@ -1092,9 +1112,9 @@ pub fn passkey_available() -> bool {
 }
 
 #[tauri::command(async)]
-pub fn passkey_enroll(
-    app: tauri::AppHandle,
-    window: tauri::WebviewWindow,
+pub fn passkey_enroll<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
+    window: tauri::WebviewWindow<R>,
     state: State<'_, AppState>,
     label: String,
 ) -> Result<VaultInfo, String> {
@@ -1143,9 +1163,9 @@ pub fn passkey_enroll(
 }
 
 #[tauri::command(async)]
-pub fn unlock_with_passkey(
-    app: tauri::AppHandle,
-    window: tauri::WebviewWindow,
+pub fn unlock_with_passkey<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
+    window: tauri::WebviewWindow<R>,
     state: State<'_, AppState>,
     path: Option<String>,
     remember: Option<bool>,
@@ -2043,5 +2063,206 @@ mod two_factor {
             .unwrap();
 
         assert_eq!(totp_for(&session, carrying).unwrap().code, direct.0);
+    }
+}
+
+#[cfg(all(test, not(target_os = "windows")))]
+#[allow(clippy::unwrap_used, clippy::panic)]
+mod wiring {
+    use super::*;
+    use tauri::test::{mock_builder, mock_context, noop_assets};
+
+    const PASSWORD: &str = "correct horse battery staple";
+
+    struct Fixture {
+        app: tauri::App<tauri::test::MockRuntime>,
+        config: PathBuf,
+        dir: PathBuf,
+        vault: PathBuf,
+    }
+
+    impl Drop for Fixture {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.config);
+            let _ = std::fs::remove_dir_all(&self.dir);
+        }
+    }
+
+    fn fixture() -> Fixture {
+        let unique = Uuid::new_v4();
+        let mut context = mock_context(noop_assets());
+        context.config_mut().identifier = format!("obscura-test-{unique}");
+
+        let app = mock_builder()
+            .manage(AppState::default())
+            .build(context)
+            .unwrap();
+
+        let config = app.path().app_config_dir().unwrap();
+        let dir = std::env::temp_dir().join(format!("obscura-wiring-{unique}"));
+        std::fs::create_dir_all(&dir).unwrap();
+
+        Fixture {
+            app,
+            config,
+            vault: dir.join("vault.obscura"),
+            dir,
+        }
+    }
+
+    impl Fixture {
+        fn handle(&self) -> tauri::AppHandle<tauri::test::MockRuntime> {
+            self.app.handle().clone()
+        }
+
+        fn at(&self) -> Option<String> {
+            Some(self.vault.display().to_string())
+        }
+
+        fn create(&self) -> VaultInfo {
+            create_vault(
+                self.handle(),
+                self.app.state(),
+                self.at(),
+                PASSWORD.to_owned(),
+                Some(120),
+                Some(false),
+            )
+            .unwrap()
+        }
+
+        fn open(&self, accept_revision: Option<u64>) -> Result<VaultInfo, UnlockError> {
+            unlock(
+                self.handle(),
+                self.app.state(),
+                self.at(),
+                PASSWORD.to_owned(),
+                Some(false),
+                accept_revision,
+            )
+        }
+    }
+
+    fn an_entry() -> EntryInput {
+        EntryInput {
+            id: None,
+            kind: obscura_vault::EntryKind::Login,
+            title: "GitHub".to_owned(),
+            username: "saheb".to_owned(),
+            password: Some("first-secret".to_owned()),
+            urls: Vec::new(),
+            notes: String::new(),
+            tags: Vec::new(),
+            favorite: false,
+            totp_uri: None,
+            custom_fields: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn a_vault_is_created_where_it_was_asked_to_be_and_opens_again() {
+        let f = fixture();
+        let made = f.create();
+
+        assert!(f.vault.is_file());
+        assert_eq!(made.entry_count, 0);
+        assert!(lock(f.app.state()));
+
+        let reopened = f.open(None).unwrap();
+        assert_eq!(reopened.id, made.id);
+    }
+
+    #[test]
+    fn an_entry_saved_through_the_command_is_on_disk_before_the_session_ends() {
+        let f = fixture();
+        f.create();
+
+        save_entry(f.handle(), f.app.state(), an_entry()).unwrap();
+        lock(f.app.state());
+
+        assert_eq!(
+            f.open(None).unwrap().entry_count,
+            1,
+            "save_entry writes the vault itself rather than waiting for anything later, so an \\
+             entry must survive a lock with no further action"
+        );
+    }
+
+    #[test]
+    fn a_wrong_password_leaves_the_session_locked() {
+        let f = fixture();
+        f.create();
+        lock(f.app.state());
+
+        let refused = unlock(
+            f.handle(),
+            f.app.state(),
+            f.at(),
+            "not the master password".to_owned(),
+            Some(false),
+            None,
+        );
+
+        assert!(refused.is_err());
+        assert!(
+            vault_info(f.app.state()).is_err(),
+            "a refused unlock must not leave a session behind for the next command to use"
+        );
+    }
+
+    #[test]
+    fn relocating_leaves_nothing_at_the_old_place() {
+        let f = fixture();
+        f.create();
+        let moved = f.dir.join("moved.obscura");
+
+        relocate_vault(
+            f.handle(),
+            f.app.state(),
+            moved.display().to_string(),
+            Some(false),
+        )
+        .unwrap();
+
+        assert!(moved.is_file());
+        assert!(
+            !f.vault.exists(),
+            "relocating deletes the original, which is why the written file is verified first"
+        );
+    }
+
+    #[test]
+    fn an_older_copy_put_back_is_refused_until_the_revision_on_disk_is_confirmed() {
+        let f = fixture();
+        let made = f.create();
+        let older = std::fs::read(&f.vault).unwrap();
+
+        save_entry(f.handle(), f.app.state(), an_entry()).unwrap();
+        lock(f.app.state());
+
+        std::fs::write(&f.vault, &older).unwrap();
+
+        let refused = f.open(None).unwrap_err();
+        let told = serde_json::to_string(&refused).unwrap();
+        assert!(told.contains("confirm"), "{told}");
+
+        let admitted = f.open(Some(made.revision)).unwrap();
+        assert_eq!(
+            admitted.entry_count, 0,
+            "confirming the revision found on disk opens that older vault, entries and all"
+        );
+    }
+
+    #[test]
+    fn the_auto_lock_the_user_chose_outlives_the_session() {
+        let f = fixture();
+        f.create();
+
+        assert_eq!(set_auto_lock(f.handle(), f.app.state(), 900), 900);
+        assert_eq!(
+            location::remembered_auto_lock(&f.handle()),
+            Some(900),
+            "the setting reaches the settings file, or it would be forgotten on the next launch"
+        );
     }
 }
