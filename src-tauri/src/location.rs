@@ -42,50 +42,72 @@ fn pointer_file(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     Ok(dir.join(POINTER_FILE))
 }
 
-fn load(app: &tauri::AppHandle) -> Stored {
-    pointer_file(app)
+fn load_from(file: &Path) -> Stored {
+    fs::read_to_string(file)
         .ok()
-        .and_then(|file| fs::read_to_string(file).ok())
         .and_then(|text| serde_json::from_str(&text).ok())
         .unwrap_or_default()
 }
 
-fn save(app: &tauri::AppHandle, stored: &Stored) -> Result<(), String> {
+fn save_to(file: &Path, stored: &Stored) -> Result<(), String> {
     let text = serde_json::to_string_pretty(stored)
         .map_err(|e| format!("cannot encode the settings file: {e}"))?;
-    let file = pointer_file(app)?;
-    fs::write(&file, text).map_err(|e| format!("cannot write {}: {e}", file.display()))
+    fs::write(file, text).map_err(|e| format!("cannot write {}: {e}", file.display()))
 }
 
 #[must_use]
 pub fn remembered(app: &tauri::AppHandle) -> Option<PathBuf> {
-    load(app)
+    pointer_file(app).ok().and_then(|file| remembered_in(&file))
+}
+
+#[must_use]
+pub fn remembered_in(file: &Path) -> Option<PathBuf> {
+    load_from(file)
         .vault_path
         .filter(|p| !p.trim().is_empty())
         .map(PathBuf::from)
 }
 
 pub fn remember(app: &tauri::AppHandle, path: &Path) -> Result<(), String> {
-    let mut stored = load(app);
+    remember_in(&pointer_file(app)?, path)
+}
+
+pub fn remember_in(file: &Path, path: &Path) -> Result<(), String> {
+    let mut stored = load_from(file);
     stored.vault_path = Some(path.display().to_string());
-    save(app, &stored)
+    save_to(file, &stored)
 }
 
 pub fn forget(app: &tauri::AppHandle) -> Result<(), String> {
-    let mut stored = load(app);
+    forget_in(&pointer_file(app)?)
+}
+
+pub fn forget_in(file: &Path) -> Result<(), String> {
+    let mut stored = load_from(file);
     stored.vault_path = None;
-    save(app, &stored)
+    save_to(file, &stored)
 }
 
 #[must_use]
 pub fn remembered_auto_lock(app: &tauri::AppHandle) -> Option<u64> {
-    load(app).auto_lock_secs
+    pointer_file(app)
+        .ok()
+        .and_then(|file| remembered_auto_lock_in(&file))
+}
+
+#[must_use]
+pub fn remembered_auto_lock_in(file: &Path) -> Option<u64> {
+    load_from(file).auto_lock_secs
 }
 
 pub fn remember_auto_lock(app: &tauri::AppHandle, seconds: u64) -> Result<(), String> {
-    let mut stored = load(app);
+    remember_auto_lock_in(&pointer_file(app)?, seconds)
+}
+
+pub fn remember_auto_lock_in(file: &Path, seconds: u64) -> Result<(), String> {
+    let mut stored = load_from(file);
     stored.auto_lock_secs = Some(seconds);
-    save(app, &stored)
+    save_to(file, &stored)
 }
 
 #[must_use]
@@ -273,5 +295,82 @@ mod verification {
         assert!(!looks_synced(Path::new(
             "/home/saheb/one drive over/vault.obscura"
         )));
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod remembering {
+    use super::*;
+
+    fn scratch() -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("obscura-location-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    #[test]
+    fn forgetting_the_vault_leaves_the_other_settings_alone() {
+        let dir = scratch();
+        let file = dir.join("settings.json");
+
+        assert!(remembered_in(&file).is_none());
+        assert!(remembered_auto_lock_in(&file).is_none());
+
+        remember_auto_lock_in(&file, 900).unwrap();
+        remember_in(&file, Path::new("D:/vaults/personal.obscura")).unwrap();
+
+        assert_eq!(
+            remembered_in(&file).unwrap(),
+            PathBuf::from("D:/vaults/personal.obscura")
+        );
+        assert_eq!(remembered_auto_lock_in(&file), Some(900));
+
+        forget_in(&file).unwrap();
+
+        assert!(remembered_in(&file).is_none());
+        assert_eq!(
+            remembered_auto_lock_in(&file),
+            Some(900),
+            "forgetting where the vault lives must not discard the auto-lock the user set - \
+             both live in one file, which is why every write reads it first"
+        );
+
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn a_settings_file_that_will_not_parse_is_empty_rather_than_fatal() {
+        let dir = scratch();
+        let file = dir.join("settings.json");
+        fs::write(&file, b"{ this is not json").unwrap();
+
+        assert!(remembered_in(&file).is_none());
+        assert!(remembered_auto_lock_in(&file).is_none());
+
+        remember_in(&file, Path::new("D:/vaults/personal.obscura")).unwrap();
+        assert_eq!(
+            remembered_in(&file).unwrap(),
+            PathBuf::from("D:/vaults/personal.obscura"),
+            "a spoiled settings file must never stop Obscura opening - it holds a convenience, \
+             not the vault"
+        );
+
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn a_blank_path_is_not_a_remembered_location() {
+        let dir = scratch();
+        let file = dir.join("settings.json");
+
+        remember_in(&file, Path::new("   ")).unwrap();
+        assert!(
+            remembered_in(&file).is_none(),
+            "whitespace resolves to the working directory, so the gate would offer to unlock a \
+             vault that is not there"
+        );
+
+        fs::remove_dir_all(&dir).unwrap();
     }
 }
