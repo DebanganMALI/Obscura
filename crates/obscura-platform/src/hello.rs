@@ -15,7 +15,7 @@ const FINGERPRINT_INFO: &[u8] = b"obscura/windows-hello/public-fingerprint/v1";
 
 #[must_use]
 pub fn credential_name(vault_id: &str) -> String {
-    format!("Obscura/{vault_id}")
+    format!("Obscura.{vault_id}")
 }
 
 #[must_use]
@@ -263,7 +263,12 @@ mod tests {
         let a = credential_name("8f1c0000-0000-0000-0000-000000000001");
         let b = credential_name("8f1c0000-0000-0000-0000-000000000002");
         assert_ne!(a, b);
-        assert!(a.starts_with("Obscura/"));
+        assert!(a.starts_with("Obscura."));
+        assert!(
+            !a.contains('/') && !a.contains('\\'),
+            "Windows refuses a credential name holding a path separator, so enrolment could \
+             never succeed with one"
+        );
     }
 
     #[test]

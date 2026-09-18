@@ -23,3 +23,5 @@ lcov.info
 *.msix
 *.msixbundle
 packaging/windows/dist/
+.winapp/
+packaging/windows/probe/
