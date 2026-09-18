@@ -1041,18 +1041,21 @@ function renderSlots(slots) {
       remove.classList.add("icon-btn--off");
     } else {
       remove.title = "Remove " + slot.label;
-      remove.addEventListener("click", () => removeSlot(slot));
+      remove.addEventListener("click", () => removeSlot(slot, remove));
     }
     row.append(remove);
     host.append(row);
   }
 }
 
-async function removeSlot(slot) {
+async function removeSlot(slot, button) {
   const error = $("s-slots-error");
   error.textContent = "";
-  const button = $("s-slots").querySelector('[title^="Remove"]');
   if (button && button.dataset.armed !== "1") {
+    for (const other of $("s-slots").querySelectorAll('[data-armed="1"]')) {
+      other.dataset.armed = "0";
+      other.classList.remove("btn--danger");
+    }
     button.dataset.armed = "1";
     button.classList.add("btn--danger");
     toast("Click again to remove " + slot.label, "warn");
