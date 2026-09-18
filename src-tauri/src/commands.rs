@@ -3,7 +3,8 @@
 
 use std::{path::PathBuf, time::Duration};
 
-use obscura_crypto::{kdf, KdfParams};
+use obscura_crypto::{hybrid::HybridSecretKey, kdf, KdfParams};
+use obscura_platform::hello;
 use obscura_vault::{
     csv_import,
     format::SlotKind,
@@ -939,6 +940,94 @@ pub fn remove_slot(
         persist(&app, session, &path)?;
         Ok(info(session, secs))
     })
+}
+
+#[tauri::command]
+pub fn hello_available() -> Result<bool, String> {
+    hello::is_available().map_err(|e| e.to_string())
+}
+
+#[tauri::command(async)]
+pub fn hello_enroll(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    label: String,
+) -> Result<VaultInfo, String> {
+    let secs = state.auto_lock().as_secs();
+    let label = if label.trim().is_empty() {
+        "Windows Hello".to_owned()
+    } else {
+        label.trim().to_owned()
+    };
+
+    state.with_session(|session| {
+        let vault_id = session.vault.id().to_string();
+        let seed = hello::enroll(&vault_id).map_err(|e| e.to_string())?;
+        session
+            .vault
+            .add_identity_slot(SlotKind::Hardware, label, &HybridSecretKey::from_seed(seed))
+            .map_err(|e| e.to_string())?;
+        let path = session.path.clone();
+        persist(&app, session, &path)?;
+        Ok(info(session, secs))
+    })
+}
+
+#[tauri::command(async)]
+pub fn hello_forget(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    id: Uuid,
+) -> Result<VaultInfo, String> {
+    let secs = state.auto_lock().as_secs();
+    state.with_session(|session| {
+        let vault_id = session.vault.id().to_string();
+        session.vault.remove_slot(id).map_err(|e| e.to_string())?;
+        hello::forget(&vault_id).map_err(|e| e.to_string())?;
+        let path = session.path.clone();
+        persist(&app, session, &path)?;
+        Ok(info(session, secs))
+    })
+}
+
+#[tauri::command(async)]
+pub fn unlock_with_hello(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    path: Option<String>,
+    remember: Option<bool>,
+    accept_revision: Option<u64>,
+) -> Result<VaultInfo, UnlockError> {
+    let target = resolve(&app, path).map_err(UnlockError::message)?;
+    if !target.exists() {
+        return Err(UnlockError::message(format!(
+            "no vault found at {}",
+            target.display()
+        )));
+    }
+
+    let bytes = std::fs::read(&target)
+        .map_err(|e| UnlockError::message(format!("cannot read {}: {e}", target.display())))?;
+    let (header, _, _) =
+        obscura_vault::format::decode_header(&bytes).map_err(|e| unlock_failure(&e))?;
+
+    let seed = hello::unlock(&header.vault_id.to_string())
+        .map_err(|e| UnlockError::message(e.to_string()))?;
+
+    let vault = Vault::from_bytes(
+        &bytes,
+        &Credential::Identity(&HybridSecretKey::from_seed(seed)),
+        None,
+    )
+    .map_err(|e| unlock_failure(&e))?;
+
+    admit(&app, &vault, accept_revision)?;
+    apply_remember(&app, &target, remember);
+
+    let session = Session::new(vault, target);
+    let summary = info(&session, state.auto_lock().as_secs());
+    state.set(session);
+    Ok(summary)
 }
 
 #[cfg(test)]

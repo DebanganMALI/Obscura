@@ -26,6 +26,7 @@ tauri-build      = { workspace = true }
 [dependencies]
 obscura-crypto   = { workspace = true }
 obscura-vault    = { workspace = true }
+obscura-platform = { workspace = true }
 tauri            = { workspace = true }
 tauri-plugin-dialog = { workspace = true }
 arboard          = { workspace = true }
