@@ -264,69 +264,77 @@ pub fn set_auto_lock(app: tauri::AppHandle, state: State<'_, AppState>, seconds:
     applied
 }
 
+fn summaries(session: &Session, needle: &str) -> Vec<EntrySummary> {
+    let mut found: Vec<EntrySummary> = session
+        .vault
+        .search(needle)
+        .into_iter()
+        .map(EntrySummary::from)
+        .collect();
+    found.sort_by(|a, b| {
+        b.favorite
+            .cmp(&a.favorite)
+            .then_with(|| a.title.to_lowercase().cmp(&b.title.to_lowercase()))
+    });
+    found
+}
+
 #[tauri::command]
 pub fn list_entries(
     state: State<'_, AppState>,
     query: Option<String>,
 ) -> Result<Vec<EntrySummary>, String> {
     let needle = query.unwrap_or_default();
-    state.with_session(|session| {
-        let mut found: Vec<EntrySummary> = session
-            .vault
-            .search(&needle)
-            .into_iter()
-            .map(EntrySummary::from)
-            .collect();
-        found.sort_by(|a, b| {
-            b.favorite
-                .cmp(&a.favorite)
-                .then_with(|| a.title.to_lowercase().cmp(&b.title.to_lowercase()))
-        });
-        Ok(found)
+    state.with_session(|session| Ok(summaries(session, &needle)))
+}
+
+fn detail(session: &Session, id: Uuid) -> Result<EntryDetail, String> {
+    let entry = session.vault.get(id).ok_or("no such entry")?;
+    Ok(EntryDetail {
+        summary: EntrySummary::from(entry),
+        urls: entry.urls.clone(),
+        notes: entry.notes.expose().to_owned(),
+        custom_fields: entry
+            .custom_fields
+            .iter()
+            .map(|field| CustomFieldView {
+                name: field.name.clone(),
+                value: (!field.hidden).then(|| field.value.expose().to_owned()),
+                hidden: field.hidden,
+            })
+            .collect(),
+        password_len: entry.password.len(),
     })
 }
 
 #[tauri::command]
 pub fn get_entry(state: State<'_, AppState>, id: Uuid) -> Result<EntryDetail, String> {
-    state.with_session(|session| {
-        let entry = session.vault.get(id).ok_or("no such entry")?;
-        Ok(EntryDetail {
-            summary: EntrySummary::from(entry),
-            urls: entry.urls.clone(),
-            notes: entry.notes.expose().to_owned(),
-            custom_fields: entry
-                .custom_fields
-                .iter()
-                .map(|field| CustomFieldView {
-                    name: field.name.clone(),
-                    value: (!field.hidden).then(|| field.value.expose().to_owned()),
-                    hidden: field.hidden,
-                })
-                .collect(),
-            password_len: entry.password.len(),
-        })
-    })
+    state.with_session(|session| detail(session, id))
+}
+
+fn field_value(session: &Session, id: Uuid, name: &str) -> Result<String, String> {
+    let entry = session.vault.get(id).ok_or("no such entry")?;
+    entry
+        .custom_fields
+        .iter()
+        .find(|field| field.name == name)
+        .map(|field| field.value.expose().to_owned())
+        .ok_or_else(|| "no such field".to_owned())
 }
 
 #[tauri::command]
 pub fn reveal_field(state: State<'_, AppState>, id: Uuid, name: String) -> Result<String, String> {
-    state.with_session(|session| {
-        let entry = session.vault.get(id).ok_or("no such entry")?;
-        entry
-            .custom_fields
-            .iter()
-            .find(|field| field.name == name)
-            .map(|field| field.value.expose().to_owned())
-            .ok_or_else(|| "no such field".to_owned())
-    })
+    state.with_session(|session| field_value(session, id, &name))
+}
+
+fn password_value(session: &Session, id: Uuid) -> Result<String, String> {
+    let entry = session.vault.get(id).ok_or("no such entry")?;
+    Ok(entry.password.expose().to_owned())
 }
 
 #[tauri::command]
 pub fn reveal_password(state: State<'_, AppState>, id: Uuid) -> Result<String, String> {
-    state.with_session(|session| {
-        let entry = session.vault.get(id).ok_or("no such entry")?;
-        Ok(entry.password.expose().to_owned())
-    })
+    state.with_session(|session| password_value(session, id))
 }
 
 #[tauri::command]
@@ -998,5 +1006,130 @@ mod tests {
             "an empty field is the only way to take a code off an entry, and before this \
              there was none - once added, a code could never be removed"
         );
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::indexing_slicing)]
+mod session_reads {
+    use super::*;
+    use obscura_vault::CustomField;
+
+    const FAST: KdfParams = KdfParams {
+        m_cost_kib: 64 * 1024,
+        t_cost: 2,
+        p_cost: 1,
+    };
+
+    fn a_session() -> (Session, Uuid) {
+        let mut vault = Vault::create(b"correct horse battery staple", FAST).unwrap();
+
+        let mut entry = Entry::new_login("GitHub", "saheb");
+        entry.set_password("correct-horse-battery-staple");
+        entry.notes = SecretString::from("a private note");
+        entry.custom_fields = vec![
+            CustomField {
+                name: "shown".to_owned(),
+                value: SecretString::from("a visible value"),
+                hidden: false,
+            },
+            CustomField {
+                name: "hidden".to_owned(),
+                value: SecretString::from("a hidden value"),
+                hidden: true,
+            },
+        ];
+        let id = vault.add(entry).unwrap();
+
+        let mut favourite = Entry::new_login("aardvark", "someone");
+        favourite.favorite = true;
+        vault.add(favourite).unwrap();
+
+        (Session::new(vault, PathBuf::from("vault.obscura")), id)
+    }
+
+    #[test]
+    fn the_entry_view_withholds_a_hidden_field_but_keeps_its_name() {
+        let (session, id) = a_session();
+        let view = detail(&session, id).unwrap();
+
+        let shown = view
+            .custom_fields
+            .iter()
+            .find(|f| f.name == "shown")
+            .unwrap();
+        assert_eq!(shown.value.as_deref(), Some("a visible value"));
+        assert!(!shown.hidden);
+
+        let hidden = view
+            .custom_fields
+            .iter()
+            .find(|f| f.name == "hidden")
+            .unwrap();
+        assert!(hidden.hidden);
+        assert!(
+            hidden.value.is_none(),
+            "a hidden field's value must reach the interface only through reveal_field"
+        );
+    }
+
+    #[test]
+    fn the_entry_view_sends_a_length_and_never_the_password() {
+        let (session, id) = a_session();
+        let view = detail(&session, id).unwrap();
+
+        assert_eq!(view.password_len, "correct-horse-battery-staple".len());
+
+        let json = serde_json::to_string(&view).unwrap();
+        assert!(!json.contains("correct-horse-battery-staple"));
+        assert!(!json.contains("a hidden value"));
+    }
+
+    #[test]
+    fn revealing_answers_for_one_named_field_and_refuses_the_rest() {
+        let (session, id) = a_session();
+
+        assert_eq!(
+            field_value(&session, id, "hidden").unwrap(),
+            "a hidden value"
+        );
+        assert_eq!(
+            field_value(&session, id, "shown").unwrap(),
+            "a visible value"
+        );
+        assert!(field_value(&session, id, "absent").is_err());
+        assert!(field_value(&session, Uuid::nil(), "hidden").is_err());
+    }
+
+    #[test]
+    fn a_password_is_revealed_only_for_an_entry_that_exists() {
+        let (session, id) = a_session();
+
+        assert_eq!(
+            password_value(&session, id).unwrap(),
+            "correct-horse-battery-staple"
+        );
+        assert!(password_value(&session, Uuid::nil()).is_err());
+    }
+
+    #[test]
+    fn the_list_puts_favourites_first_and_then_sorts_by_title() {
+        let (session, _) = a_session();
+        let all = summaries(&session, "");
+
+        assert_eq!(all.len(), 2);
+        assert_eq!(all[0].title, "aardvark");
+        assert_eq!(all[1].title, "GitHub");
+
+        assert_eq!(summaries(&session, "github").len(), 1);
+        assert_eq!(summaries(&session, "nothing here at all").len(), 0);
+    }
+
+    #[test]
+    fn a_generated_password_matches_the_policy_it_was_asked_for() {
+        let made = generate(24, true, true, true, false, false, true).unwrap();
+        assert_eq!(made.password.chars().count(), 24);
+        assert!(made.entropy_bits > 0.0);
+        assert!(generate(0, true, true, true, true, false, true).is_err());
     }
 }
