@@ -1045,6 +1045,131 @@ pub fn unlock_with_hello(
     Ok(summary)
 }
 
+#[cfg(target_os = "windows")]
+fn passkey_window(window: &tauri::WebviewWindow) -> Result<isize, String> {
+    window
+        .hwnd()
+        .map(|handle| handle.0 as isize)
+        .map_err(|e| format!("cannot find the application window: {e}"))
+}
+
+#[cfg(not(target_os = "windows"))]
+fn passkey_window(_window: &tauri::WebviewWindow) -> Result<isize, String> {
+    Err("passkeys need Windows in this build of Obscura".to_owned())
+}
+
+fn passkey_failure(error: &obscura_webauthn::WebAuthnError) -> UnlockError {
+    use obscura_webauthn::WebAuthnError as E;
+    match error {
+        E::ApiTooOld(version) => UnlockError::message(format!(
+            "this copy of Windows speaks WebAuthn version {version}, and a passkey needs version \
+             {}, which arrived in Windows 10 version 2004",
+            obscura_webauthn::PRF_API_VERSION
+        )),
+        E::NoPrfSecret | E::PrfSecretLength(_) => UnlockError::message(
+            "that authenticator cannot derive a vault key, so it cannot open this vault",
+        ),
+        E::Unsupported => UnlockError::message("this build of Obscura has no passkey support"),
+        other => UnlockError::message(other.to_string()),
+    }
+}
+
+#[tauri::command]
+pub fn passkey_available() -> bool {
+    obscura_webauthn::is_available()
+}
+
+#[tauri::command(async)]
+pub fn passkey_enroll(
+    app: tauri::AppHandle,
+    window: tauri::WebviewWindow,
+    state: State<'_, AppState>,
+    label: String,
+) -> Result<VaultInfo, String> {
+    let secs = state.auto_lock().as_secs();
+    let handle = passkey_window(&window)?;
+    let label = if label.trim().is_empty() {
+        "Phone passkey".to_owned()
+    } else {
+        label.trim().to_owned()
+    };
+
+    state.with_session(|session| {
+        let vault_id = session.vault.id().to_string();
+        let enrolled = obscura_webauthn::enroll(
+            handle,
+            obscura_webauthn::RP_ID,
+            "Obscura",
+            &vault_id,
+            vault_id.as_bytes(),
+        )
+        .map_err(|e| e.to_string())?;
+
+        if !enrolled.prf_enabled {
+            return Err(
+                "that authenticator cannot derive a vault key, so it cannot open this vault"
+                    .to_owned(),
+            );
+        }
+
+        let salt = obscura_webauthn::salt_for(&vault_id).map_err(|e| e.to_string())?;
+        let seed = obscura_webauthn::prf_secret(handle, obscura_webauthn::RP_ID, &salt)
+            .map_err(|e| e.to_string())?;
+
+        session
+            .vault
+            .add_identity_slot(SlotKind::Passkey, label, &HybridSecretKey::from_seed(seed))
+            .map_err(|e| e.to_string())?;
+        let path = session.path.clone();
+        persist(&app, session, &path)?;
+        Ok(info(session, secs))
+    })
+}
+
+#[tauri::command(async)]
+pub fn unlock_with_passkey(
+    app: tauri::AppHandle,
+    window: tauri::WebviewWindow,
+    state: State<'_, AppState>,
+    path: Option<String>,
+    remember: Option<bool>,
+    accept_revision: Option<u64>,
+) -> Result<VaultInfo, UnlockError> {
+    let handle = passkey_window(&window).map_err(UnlockError::message)?;
+    let target = resolve(&app, path).map_err(UnlockError::message)?;
+    if !target.exists() {
+        return Err(UnlockError::message(format!(
+            "no vault found at {}",
+            target.display()
+        )));
+    }
+
+    let bytes = std::fs::read(&target)
+        .map_err(|e| UnlockError::message(format!("cannot read {}: {e}", target.display())))?;
+    let (header, _, _) =
+        obscura_vault::format::decode_header(&bytes).map_err(|e| unlock_failure(&e))?;
+
+    let salt = obscura_webauthn::salt_for(&header.vault_id.to_string())
+        .map_err(|e| passkey_failure(&e))?;
+    let seed = obscura_webauthn::prf_secret(handle, obscura_webauthn::RP_ID, &salt)
+        .map_err(|e| passkey_failure(&e))?;
+
+    let vault = Vault::from_bytes(
+        &bytes,
+        &Credential::Identity(&HybridSecretKey::from_seed(seed)),
+        None,
+    )
+    .map_err(|e| unlock_failure(&e))?;
+
+    admit(&app, &vault, accept_revision)?;
+    apply_remember(&app, &target, remember);
+
+    let session = Session::new(vault, target);
+    let summary = info(&session, state.auto_lock().as_secs());
+    state.set(session);
+    Ok(summary)
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::indexing_slicing)]
 mod tests {
@@ -1773,5 +1898,41 @@ mod hello_errors {
     fn anything_unrecognised_still_repeats_what_windows_said() {
         let raw = E::Platform(0x8009_0027);
         assert!(shown(&hello_failure(&raw)).contains(&raw.to_string()));
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod passkey_errors {
+    use super::*;
+    use obscura_webauthn::WebAuthnError as E;
+
+    fn shown(error: &E) -> String {
+        serde_json::to_string(&passkey_failure(error)).unwrap()
+    }
+
+    #[test]
+    fn a_windows_too_old_for_prf_names_the_version_it_needs() {
+        let told = shown(&E::ApiTooOld(1));
+        assert!(told.contains('1'), "{told}");
+        assert!(
+            told.contains(&obscura_webauthn::PRF_API_VERSION.to_string()),
+            "{told}"
+        );
+    }
+
+    #[test]
+    fn an_authenticator_without_prf_is_never_reported_as_a_wrong_credential() {
+        for error in [E::NoPrfSecret, E::PrfSecretLength(16)] {
+            let told = shown(&error);
+            assert!(told.contains("cannot derive a vault key"), "{told}");
+            assert!(!told.contains("does not open this vault"), "{told}");
+        }
+    }
+
+    #[test]
+    fn anything_else_still_repeats_what_the_platform_said() {
+        let error = E::Platform(0x8009_0027);
+        assert!(shown(&error).contains(&error.to_string()));
     }
 }
