@@ -44,6 +44,22 @@ fn unlock_failure(error: &obscura_vault::VaultError) -> UnlockError {
     }
 }
 
+fn hello_failure(error: &obscura_platform::PlatformError) -> UnlockError {
+    use obscura_platform::PlatformError as E;
+    match error {
+        E::CredentialMissing => UnlockError::message(
+            "no Windows Hello credential is set up for this vault on this PC - unlock with your master password, then add one in Settings",
+        ),
+        E::Cancelled => UnlockError::message("Windows Hello was dismissed"),
+        E::DeviceLocked => UnlockError::message(
+            "the security device is locked - sign in to Windows again, then try once more",
+        ),
+        E::NotConfigured | E::Unsupported => {
+            UnlockError::message("Windows Hello is not available on this machine")
+        }
+        other => UnlockError::message(other.to_string()),
+    }
+}
 fn default_vault_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     let dir = app
         .path()
@@ -1011,8 +1027,7 @@ pub fn unlock_with_hello(
     let (header, _, _) =
         obscura_vault::format::decode_header(&bytes).map_err(|e| unlock_failure(&e))?;
 
-    let seed = hello::unlock(&header.vault_id.to_string())
-        .map_err(|e| UnlockError::message(e.to_string()))?;
+    let seed = hello::unlock(&header.vault_id.to_string()).map_err(|e| hello_failure(&e))?;
 
     let vault = Vault::from_bytes(
         &bytes,
@@ -1718,5 +1733,45 @@ mod storing {
             "a save that failed must leave nothing behind - the next successful save of any \
              other entry writes the whole vault, and would carry these values to disk"
         );
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod hello_errors {
+    use super::*;
+    use obscura_platform::PlatformError as E;
+
+    fn shown(error: &UnlockError) -> String {
+        serde_json::to_string(error).unwrap()
+    }
+
+    #[test]
+    fn a_missing_credential_points_at_settings_rather_than_implying_loss() {
+        let told = shown(&hello_failure(&E::CredentialMissing));
+        assert!(told.contains("Settings"), "{told}");
+        assert!(
+            !told.contains("no longer"),
+            "a first enrolment has not been lost, so the message must not say it has: {told}"
+        );
+    }
+
+    #[test]
+    fn a_dismissed_prompt_does_not_read_as_a_failure() {
+        let told = shown(&hello_failure(&E::Cancelled));
+        assert!(told.contains("dismissed"), "{told}");
+    }
+
+    #[test]
+    fn a_locked_device_names_the_remedy() {
+        let told = shown(&hello_failure(&E::DeviceLocked));
+        assert!(told.contains("locked"), "{told}");
+        assert!(told.contains("sign in"), "{told}");
+    }
+
+    #[test]
+    fn anything_unrecognised_still_repeats_what_windows_said() {
+        let raw = E::Platform(0x8009_0027);
+        assert!(shown(&hello_failure(&raw)).contains(&raw.to_string()));
     }
 }
