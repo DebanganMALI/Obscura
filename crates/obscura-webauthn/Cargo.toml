@@ -1,0 +1,23 @@
+[package]
+name = "obscura-webauthn"
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+license.workspace      = true
+repository.workspace   = true
+authors.workspace      = true
+description            = "Windows WebAuthn PRF bindings for Obscura."
+publish                = false
+
+[lints]
+workspace = true
+
+[dependencies]
+thiserror = { workspace = true }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+windows = { workspace = true, features = [
+    "Win32_Foundation",
+    "Win32_Networking_WindowsWebServices",
+    "Win32_System_Console",
+] }
