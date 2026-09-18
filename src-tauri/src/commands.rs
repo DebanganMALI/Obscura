@@ -179,6 +179,20 @@ pub fn calibrate(target_ms: u32) -> Result<serde_json::Value, String> {
     }))
 }
 
+fn check_new_vault_location(target: &std::path::Path) -> Result<(), String> {
+    if target.exists() {
+        return Err("a vault already exists at that location".to_owned());
+    }
+    match target.parent() {
+        Some(parent) if parent.is_dir() => Ok(()),
+        Some(parent) => Err(format!(
+                "the folder {} does not exist - if the vault lives on an encrypted volume or a removable disk, mount it first",
+            parent.display()
+        )),
+        None => Err("that is not a valid file path".to_owned()),
+    }
+}
+
 #[tauri::command(async)]
 pub fn create_vault(
     app: tauri::AppHandle,
@@ -191,24 +205,8 @@ pub fn create_vault(
     let password = Zeroizing::new(password);
     let target = resolve(&app, path)?;
 
-    if password.len() < MIN_PASSWORD_LEN {
-        return Err(format!(
-            "the master password must be at least {MIN_PASSWORD_LEN} characters"
-        ));
-    }
-    if target.exists() {
-        return Err("a vault already exists at that location".to_owned());
-    }
-    match target.parent() {
-        Some(parent) if parent.is_dir() => {}
-        Some(parent) => {
-            return Err(format!(
-                "the folder {} does not exist - if the vault lives on an encrypted volume or a removable disk, mount it first",
-                parent.display()
-            ))
-        }
-        None => return Err("that is not a valid file path".to_owned()),
-    }
+    check_new_password(password.as_str(), "master password")?;
+    check_new_vault_location(&target)?;
 
     let params =
         calibrate_ms.map_or_else(KdfParams::default, |ms| kdf::calibrate(ms.clamp(200, 3000)));
@@ -1510,5 +1508,41 @@ mod admission_rules {
             ),
             "an unreadable book is replaced rather than appended to, and only on agreement"
         );
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod new_vault_location {
+    use super::*;
+
+    #[test]
+    fn a_new_vault_needs_a_free_name_inside_a_folder_that_is_there() {
+        let dir = std::env::temp_dir().join(format!("obscura-create-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+
+        let free = dir.join("obscura.obscura");
+        assert!(check_new_vault_location(&free).is_ok());
+
+        std::fs::write(&free, b"anything").unwrap();
+        assert!(
+            check_new_vault_location(&free)
+                .unwrap_err()
+                .contains("already exists"),
+            "creating a vault must never write over a file that is already there"
+        );
+
+        assert!(
+            check_new_vault_location(&dir.join("absent").join("obscura.obscura"))
+                .unwrap_err()
+                .contains("does not exist")
+        );
+
+        assert!(check_new_vault_location(std::path::Path::new(""))
+            .unwrap_err()
+            .contains("not a valid file path"));
+
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 }
