@@ -61,3 +61,21 @@ impl fmt::Display for SecretString {
         f.write_str("<redacted>")
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_secret_string_reports_the_text_it_was_given() {
+        let secret = SecretString::from(String::from("hunter2"));
+        assert_eq!(secret.expose(), "hunter2");
+        assert_eq!(secret.len(), 7);
+        assert!(!secret.is_empty());
+
+        let empty = SecretString::from(String::new());
+        assert_eq!(empty.expose(), "");
+        assert_eq!(empty.len(), 0);
+        assert!(empty.is_empty());
+    }
+}
