@@ -76,7 +76,7 @@ mod imp {
     pub fn is_available() -> Result<bool, PlatformError> {
         KeyCredentialManager::IsSupportedAsync()
             .map_err(win)?
-            .get()
+            .join()
             .map_err(win)
     }
 
@@ -93,7 +93,7 @@ mod imp {
         let outcome = credential
             .RequestSignAsync(&challenge)
             .map_err(win)?
-            .get()
+            .join()
             .map_err(win)?;
 
         let status = outcome.Status().map_err(win)?;
@@ -110,7 +110,7 @@ mod imp {
 
     fn delete(name: &HSTRING) {
         if let Ok(action) = KeyCredentialManager::DeleteAsync(name) {
-            let _ = action.get();
+            let _ = action.join();
         }
     }
 
@@ -125,7 +125,7 @@ mod imp {
             KeyCredentialCreationOption::FailIfExists,
         )
         .map_err(win)?
-        .get()
+        .join()
         .map_err(win)?;
 
         if result.Status().map_err(win)? == KeyCredentialStatus::CredentialAlreadyExists {
@@ -152,7 +152,7 @@ mod imp {
         let name = HSTRING::from(credential_name(vault_id));
         let result = KeyCredentialManager::OpenAsync(&name)
             .map_err(win)?
-            .get()
+            .join()
             .map_err(win)?;
 
         let status = result.Status().map_err(win)?;
@@ -173,7 +173,7 @@ mod imp {
         let name = HSTRING::from(name);
         let result = KeyCredentialManager::OpenAsync(&name)
             .map_err(win)?
-            .get()
+            .join()
             .map_err(win)?;
 
         let status = result.Status().map_err(win)?;
