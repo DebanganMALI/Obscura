@@ -22,4 +22,9 @@ $manifest = [IO.File]::ReadAllText("packaging\windows\Package.appxmanifest")
 $manifest = [regex]::Replace($manifest, 'Version="\d+\.\d+\.\d+\.\d+"', "Version=`"$Version`"")
 [IO.File]::WriteAllText("$dist\Package.appxmanifest", $manifest)
 
-winapp pack $dist --generate-cert --publisher $Publisher --output "$out\Obscura_${Version}_x64.msix"
+$cert = "$out\DebanganMali.Obscura_cert.pfx"
+if (Test-Path $cert) {
+    winapp pack $dist --cert $cert --output "$out\Obscura_${Version}_x64.msix"
+} else {
+    winapp pack $dist --generate-cert --publisher $Publisher --output "$out\Obscura_${Version}_x64.msix"
+}
