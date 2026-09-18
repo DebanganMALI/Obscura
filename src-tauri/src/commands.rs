@@ -379,27 +379,31 @@ pub fn copy_text(text: String, clear_after: Option<u64>) -> Result<(), String> {
     clipboard::copy_with_timeout(Zeroizing::new(text), clear_after.unwrap_or(30))
 }
 
+fn store(session: &mut Session, input: &EntryInput) -> Result<Uuid, String> {
+    if let Some(existing) = input.id {
+        let mut edited = session.vault.get(existing).ok_or("no such entry")?.clone();
+        apply(&mut edited, input)?;
+        *session.vault.get_mut(existing).ok_or("no such entry")? = edited;
+        Ok(existing)
+    } else {
+        let mut entry = Entry::new_login(input.title.clone(), input.username.clone());
+        apply(&mut entry, input)?;
+        session.vault.add(entry).map_err(|e| e.to_string())
+    }
+}
+
 #[tauri::command]
 pub fn save_entry(
     app: tauri::AppHandle,
     state: State<'_, AppState>,
     input: EntryInput,
 ) -> Result<Uuid, String> {
-    let id = state.with_session(|session| {
-        let id = if let Some(existing) = input.id {
-            let entry = session.vault.get_mut(existing).ok_or("no such entry")?;
-            apply(entry, &input)?;
-            existing
-        } else {
-            let mut entry = Entry::new_login(input.title.clone(), input.username.clone());
-            apply(&mut entry, &input)?;
-            session.vault.add(entry).map_err(|e| e.to_string())?
-        };
+    state.with_session(|session| {
+        let id = store(session, &input)?;
         let path = session.path.clone();
         persist(&app, session, &path)?;
         Ok(id)
-    })?;
-    Ok(id)
+    })
 }
 
 fn rebuild_fields(entry: &mut Entry, input: &EntryInput) -> Vec<CustomField> {
@@ -1544,5 +1548,83 @@ mod new_vault_location {
             .contains("not a valid file path"));
 
         std::fs::remove_dir_all(&dir).unwrap();
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod storing {
+    use super::*;
+
+    const FAST: KdfParams = KdfParams {
+        m_cost_kib: 64 * 1024,
+        t_cost: 2,
+        p_cost: 1,
+    };
+
+    fn a_session() -> (Session, Uuid) {
+        let mut vault = Vault::create(b"correct horse battery staple", FAST).unwrap();
+        let id = vault.add(Entry::new_login("GitHub", "saheb")).unwrap();
+        (Session::new(vault, PathBuf::from("vault.obscura")), id)
+    }
+
+    fn sent(id: Option<Uuid>) -> EntryInput {
+        EntryInput {
+            id,
+            kind: obscura_vault::EntryKind::Login,
+            title: "GitHub".to_owned(),
+            username: "saheb".to_owned(),
+            password: None,
+            urls: Vec::new(),
+            notes: String::new(),
+            tags: Vec::new(),
+            favorite: false,
+            totp_uri: None,
+            custom_fields: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn an_entry_without_an_id_is_added_and_one_with_an_id_is_edited_in_place() {
+        let (mut session, id) = a_session();
+
+        let mut edit = sent(Some(id));
+        edit.title = "GitHub (work)".to_owned();
+        assert_eq!(store(&mut session, &edit).unwrap(), id);
+        assert_eq!(session.vault.len(), 1);
+        assert_eq!(session.vault.get(id).unwrap().title, "GitHub (work)");
+
+        let fresh = store(&mut session, &sent(None)).unwrap();
+        assert_ne!(fresh, id);
+        assert_eq!(session.vault.len(), 2);
+    }
+
+    #[test]
+    fn an_unknown_id_is_refused_rather_than_quietly_creating_an_entry() {
+        let (mut session, _) = a_session();
+
+        assert!(store(&mut session, &sent(Some(Uuid::nil()))).is_err());
+        assert_eq!(
+            session.vault.len(),
+            1,
+            "an id the vault does not hold must never be taken as a request to create one"
+        );
+    }
+
+    #[test]
+    fn a_rejected_edit_leaves_the_entry_it_touched_unchanged() {
+        let (mut session, id) = a_session();
+
+        let mut bad = sent(Some(id));
+        bad.title = "GitHub (work)".to_owned();
+        bad.totp_uri = Some("this is not an otpauth uri".to_owned());
+
+        assert!(store(&mut session, &bad).is_err());
+        assert_eq!(
+            session.vault.get(id).unwrap().title,
+            "GitHub",
+            "a save that failed must leave nothing behind - the next successful save of any \
+             other entry writes the whole vault, and would carry these values to disk"
+        );
     }
 }
