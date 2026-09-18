@@ -1,0 +1,49 @@
+[package]
+name = "obscura-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[package.metadata]
+cargo-fuzz = true
+
+[workspace]
+
+[dependencies]
+libfuzzer-sys = "0.4"
+obscura-vault = { path = "../crates/obscura-vault" }
+
+[[bin]]
+name = "decode_header"
+path = "fuzz_targets/decode_header.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "vault_from_bytes"
+path = "fuzz_targets/vault_from_bytes.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "portable_decode"
+path = "fuzz_targets/portable_decode.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "csv_parse"
+path = "fuzz_targets/csv_parse.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "recovery_parse"
+path = "fuzz_targets/recovery_parse.rs"
+test = false
+doc = false
+bench = false
