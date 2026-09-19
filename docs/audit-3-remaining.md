@@ -1,69 +1,90 @@
-# Audit 3 - what is left
+# Audit 3
 
-Paused after 4f2eacf, to be resumed after passkeys and biometrics.
-Audits 1, 2, 4 and 5 are complete. Everything found so far is fixed and pushed.
+Complete. Audits 1, 2, 4 and 5 were already complete.
 
-Bugs found and fixed: 2. Both had the same shape - a check that runs after the damage is done.
-- location::is_vault_file accepted a valid header with no encrypted body, and it is the only
-  verification between a bad write and relocate_vault deleting the original vault.
-- apply mutated an entry then validated at the end, so a rejected save left the rejected values
-  in memory, and Vault::save writes the whole vault.
+## What it found
 
-Read "lines missed", not the percentage: llvm-cov instruments test code, so tests inflate both sides.
-commands.rs 719 -> 550, location.rs 70 -> 61, dto.rs 56 -> 0, workspace 1002 -> 931 (79.37%).
-Tests 211 -> 244.
+Four defects, all the same shape: **a check that runs after the damage is
+done.**
 
-## 1. Doable without a Tauri runtime
+1. `location::is_vault_file` accepted a file with a valid header and no
+   encrypted body. It is the only verification between a bad write and
+   `relocate_vault` deleting the user's original vault. Now requires a body of
+   at least `aead::OVERHEAD`.
+2. `apply` mutated an entry field by field and validated only at the end, so a
+   rejected save left the rejected values in memory - and `Vault::save` writes
+   the whole vault, so the next successful save of any entry would have
+   committed them. `store` applies to a clone and writes back on success.
+3. `import_all` added entries one at a time and returned on the first failure,
+   leaving every entry before it in the vault. It now validates and renumbers
+   the whole batch into a staging vector and commits it in one infallible step.
+4. `probe_location` asserted `writable` whenever the file existed, so a
+   read-only vault read as a usable location and the truth arrived at save time.
+   It checks the parent and the file now, because `save` writes a temporary file
+   beside the target and renames over it.
 
-- Vault::import_all - check for a third bug of the same shape. If entry 7 of 10 fails validation,
-  do entries 1-6 stay in the vault? The export side is all-or-nothing; the import side has no
-  equivalent test. Do this first.
-- totp_code - no test at all. Extracts to &Session like detail and field_value.
-- delete_entry - thin wrapper over the tested vault.remove. Comes free with section 2.
+Two more found while working rather than by the audit:
 
-## 2. Needs tauri::test (mock_builder / mock_app, dev-dependency, test feature)
+- `hello::credential_name` produced a name containing a path separator, which
+  made `RequestCreateAsync` fail with `NTE_INVALID_PARAMETER` on every machine.
+  The test pinned the broken format.
+- `removeSlot` armed the first remove button in the list rather than the one
+  clicked, so a single click could delete the master password slot with no
+  confirmation. Found by using the application; no test would have caught it.
 
-One decision unblocks all of this. Without it none of it is testable.
+## What it covered
 
-- Thirteen commands end to end: unlock, create_vault, relocate_vault, import_entries,
-  export_entries, set_master_password, change_master_password, confirm_recovery_code,
-  unlock_with_recovery, remove_slot, probe_location, save_entry, delete_entry.
-  Both bugs so far lived in sequences like these, not in the pure functions.
-- watermark.rs - 15 of 29 functions untouched, including record, check and reset_to.
-  The decision table is tested; reading and writing the book on disk is not.
-- location.rs - 16 remaining functions, all config-directory I/O.
-- clipboard.rs - 6 of 8 functions. Where exclude_from_monitoring lives.
+Tests went 211 -> 271.
 
-## 3. Needs Linux or WSL - the largest outstanding risk
+- `totp_code`, the one command with no test, now has three.
+- `watermark`'s `check`, `record` and `reset_to` - the rollback detection - are
+  tested against temporary directories.
+- `location`'s settings file is tested, including that forgetting the vault
+  location leaves the auto-lock alone.
+- Thirteen commands run end-to-end on `MockRuntime`, including the rollback
+  refusal. Linux only - see `testing.md`.
+- `cargo mutants` on Linux: 464 of 465 killable mutants caught. See
+  `mutation-testing.md`.
 
-restrict_to_owner has never been compiled. The cfg(unix) test in vault.rs asserting the vault
-file is 0600 has never been built on any machine. portable's owner-only test passes on Windows,
-where there is no 0600, so it proves nothing there. Run on WSL:
-  cargo test --workspace
-  cargo mutants -p obscura-vault
+Two things were written down rather than changed, because both are defensible
+but neither was recorded anywhere:
 
-## 4. Decisions, not tests
+- `watermark::reset_to` keeps only the vault being opened, so every other vault
+  silently loses its rollback protection. A book that will not parse cannot be
+  trusted for any vault, so this is arguable - but it should be a decision.
+- `clipboard::copy_with_timeout` writes to the real system clipboard and takes
+  no handle, so testing it would clobber whatever the developer had copied. It
+  stays untested on purpose. `exclude_from_monitoring` is the security-relevant
+  part and it is not reachable without a real clipboard.
 
-- MIN_PASSWORD_LEN is 8, measured in bytes. Two emoji pass. check_new_password is the single
-  place to change it. Current behaviour is pinned by test, not endorsed by it.
-- probe_location reports writable: true whenever the file exists, without checking the file,
-  so a read-only vault reads as usable and fails later at save time.
-- obscura-cli is a 144-byte stub at 0%. Build it out or exclude it from release artifacts.
-- obscura-platform/src/hello.rs at 28.88%, 19 of 28 functions untouched. WinRT surface, not
-  unit-testable without hardware. Directly relevant to the biometrics work.
+## Decisions still open
 
-## Order on resuming
+- `MIN_PASSWORD_LEN` is 8, measured in **bytes**. Two emoji pass. Comparable
+  projects sit at 12 or more. `check_new_password` is the single place to change
+  it. Current behaviour is pinned by test, not endorsed by it.
+- `obscura-cli` is a 144-byte stub at 0%. See `release-blockers.md`.
+- `brain.md` has been stale since `77aacf8`.
+- The interface has no tests at all. Three static files, no dependencies, and
+  the one defect found there was found by clicking. Worth deciding rather than
+  drifting into.
 
-1. import_all  2. totp_code  3. WSL run  4. then decide on tauri::test
+## Traps worth re-reading before touching this code
 
-## Traps
-
-- Never git add -A. Screenshot PNGs were swept in that way once (4a4a2ef, removed in 6fd78fa,
-  still reachable). Named paths or git add -u only.
-- Check git status --short before each commit. hybrid.rs sat uncommitted for days and the whole
-  fuzz/ directory was untracked until 9dda105.
-- PowerShell splices: guard boundaries on line content, not position. A line like "};" closes
-  two constructs - replacing it with "}" drops a brace.
-- rustfmt will not reindent a line exceeding max_width, so a moved long string keeps its indent.
-- cargo-mutants globs with forward slashes: -f "*secret.rs" works, -f "*vault/src/secret.rs" does not.
-- Windows mislabels cfg(unix) mutants as MISSED - it patches source that never compiles.
+- **Never `git add -A`.** Screenshot PNGs were swept into history that way once
+  (`4a4a2ef`, removed in `6fd78fa`, still reachable). Named paths or `git add -u`.
+- Check `git status --short` before each commit.
+- PowerShell line-splicing edits: guard every boundary on line *content*, and
+  count braces rather than lines. A line like `    };` closes two constructs.
+- A bare `return` does not reliably stop a pasted block. Wrap the whole thing in
+  `& { ... }` so guards actually halt.
+- PowerShell has no backslash escape, so a double-quoted commit message cannot
+  contain a quote at all. Use single quotes.
+- Search anchored from the top of a file finds the first match, which is rarely
+  the one you want. Anchor from the enclosing function.
+- rustfmt will not reindent a line that exceeds `max_width`, so a moved long
+  string literal keeps its old indentation.
+- cargo-mutants globs with forward slashes: `-f "*secret.rs"` works,
+  `-f "*vault/src/secret.rs"` matches nothing.
+- `concurrency.cancel-in-progress` is on, so two pushes in quick succession
+  cancel the older run. A cancelled run shows one "failed" test with code
+  `0xc000013a`. That is not a real failure.
