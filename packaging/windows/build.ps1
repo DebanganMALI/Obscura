@@ -1,6 +1,6 @@
 param(
     [string]$Version = "0.1.0.0",
-    [string]$Publisher = "CN=Debangan Mali"
+    [string]$Publisher = "CN=C2CC4240-9984-420A-8B9F-E6FE73010A59"
 )
 
 $ErrorActionPreference = "Stop"
@@ -22,9 +22,9 @@ $manifest = [IO.File]::ReadAllText("packaging\windows\Package.appxmanifest")
 $manifest = [regex]::Replace($manifest, 'Version="\d+\.\d+\.\d+\.\d+"', "Version=`"$Version`"")
 [IO.File]::WriteAllText("$dist\Package.appxmanifest", $manifest)
 
-$cert = "$out\DebanganMali.Obscura_cert.pfx"
+$cert = "$out\DebanganMali.ObscuraVault_cert.pfx"
 if (Test-Path $cert) {
-    winapp pack $dist --cert $cert --output "$out\Obscura_${Version}_x64.msix"
+    winapp pack $dist --cert $cert --output "$out\ObscuraVault_${Version}_x64.msix"
 } else {
-    winapp pack $dist --generate-cert --publisher $Publisher --output "$out\Obscura_${Version}_x64.msix"
+    winapp pack $dist --generate-cert --publisher $Publisher --output "$out\ObscuraVault_${Version}_x64.msix"
 }

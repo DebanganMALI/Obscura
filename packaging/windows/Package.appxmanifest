@@ -7,12 +7,12 @@
   IgnorableNamespaces="uap uap10 rescap">
 
   <Identity
-    Name="DebanganMali.Obscura"
-    Publisher="CN=Debangan Mali"
+    Name="DebanganMali.ObscuraVault"
+    Publisher="CN=C2CC4240-9984-420A-8B9F-E6FE73010A59"
     Version="0.1.0.0" />
 
   <Properties>
-    <DisplayName>Obscura</DisplayName>
+    <DisplayName>Obscura Vault</DisplayName>
     <PublisherDisplayName>Debangan Mali</PublisherDisplayName>
     <Logo>Assets\StoreLogo.png</Logo>
     <uap10:PackageIntegrity>
@@ -33,7 +33,7 @@
       Executable="Obscura.exe"
       EntryPoint="Windows.FullTrustApplication">
       <uap:VisualElements
-        DisplayName="Obscura"
+        DisplayName="Obscura Vault"
         Description="A post-quantum-hardened password manager."
         BackgroundColor="transparent"
         Square150x150Logo="Assets\Square150x150Logo.png"
