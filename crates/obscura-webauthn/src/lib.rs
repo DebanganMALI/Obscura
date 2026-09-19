@@ -16,7 +16,7 @@ pub use stub::{api_version, enroll, label_for, prf_secret, transport_name};
 
 pub const PRF_API_VERSION: u32 = 4;
 
-pub const RP_ID: &str = "obscura.app";
+pub const RP_ID: &str = "debanganmali.github.io";
 
 const SALT_INFO: &[u8] = b"obscura/passkey/salt/v1";
 

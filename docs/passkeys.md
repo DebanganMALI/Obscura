@@ -54,4 +54,6 @@ Windows only. Linux has no equivalent OS-level hybrid transport, so
 and the interface hides both passkey buttons when the platform reports no PRF
 support.
 
-The relying party id is not registered yet. See `release-blockers.md`.
+The relying party id is `debanganmali.github.io`. It is free, controlled, and a
+registrable domain in its own right because `github.io` is on the Public Suffix
+List. See `release-blockers.md` for why a bought domain was not worth it.
