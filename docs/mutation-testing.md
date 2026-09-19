@@ -95,3 +95,27 @@ code behave differently from the original, for any input the program can
 actually produce? Fourteen of fifteen here could not. Writing a test per
 surviving mutant without asking would have produced fourteen tests that assert
 whatever the code happens to do, which is worse than no test at all.
+## Why the workflow excludes fifteen mutants
+
+Every survivor listed above is excluded by name in `mutants.yml`, so the job is
+green when nothing new survives and red when something does. Without that, the
+workflow fails on every run, and a workflow that is always red is a workflow
+nobody reads.
+
+Fourteen exclusions are equivalent mutants: excluding them removes noise and
+loses nothing, because no test could ever have killed them.
+
+The fifteenth, `<impl Drop for Entry>::drop`, is different and the distinction
+should not be blurred. It is a real gap that is accepted because safe Rust
+cannot express the test, not because the mutant is harmless. It is excluded so
+the signal stays readable, and recorded here so the acceptance stays visible.
+
+Before adding an exclusion, the mutant has to be shown equivalent or accepted in
+this document with its reasoning. An exclusion without an entry here is a gap
+hidden rather than closed.
+
+## Re-running
+
+The run is deterministic: two runs on the same commit produced the same 544
+mutants and the same 15 survivors, in 69 and 46 minutes, the difference being a
+warm cache.
