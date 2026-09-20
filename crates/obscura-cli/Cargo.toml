@@ -7,6 +7,7 @@ rust-version.workspace = true
 license.workspace      = true
 repository.workspace   = true
 authors.workspace      = true
+description            = "Command line access to an Obscura vault."
 
 [[bin]]
 name = "obscura"
@@ -16,4 +17,7 @@ path = "src/main.rs"
 workspace = true
 
 [dependencies]
+obscura-vault  = { workspace = true }
 anyhow         = { workspace = true }
+zeroize        = { workspace = true }
+rpassword      = { workspace = true }
