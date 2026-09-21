@@ -2,6 +2,8 @@ use std::io::{self, BufRead, IsTerminal, Write};
 
 use zeroize::Zeroizing;
 
+use crate::banner;
+
 pub fn master_password() -> io::Result<Zeroizing<String>> {
     if io::stdin().is_terminal() {
         from_terminal()
@@ -11,11 +13,11 @@ pub fn master_password() -> io::Result<Zeroizing<String>> {
 }
 
 fn from_terminal() -> io::Result<Zeroizing<String>> {
-    let mut stderr = io::stderr();
-    write!(stderr, "Master password: ")?;
-    stderr.flush()?;
+    banner::paint(banner::FAINT, " master  ");
+    banner::paint(banner::ACCENT, "▸ ");
+    io::stderr().flush()?;
     let password = Zeroizing::new(rpassword::read_password()?);
-    writeln!(stderr)?;
+    writeln!(io::stderr())?;
     Ok(password)
 }
 

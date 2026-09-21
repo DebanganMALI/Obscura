@@ -3,9 +3,10 @@ use std::path::PathBuf;
 pub const USAGE: &str = "obscura - command line access to an Obscura vault
 
 USAGE
-    obscura [OPTIONS] <COMMAND>
+    obscura [OPTIONS] [COMMAND]
 
 COMMANDS
+    (none)            browse the vault interactively
     list [QUERY]      list matching entries by title and username
     get <QUERY>       print the password of the one matching entry
     totp <QUERY>      print the current one time code of the one matching entry
@@ -20,10 +21,14 @@ terminal without echo, or from standard input when standard input is not a
 terminal, so it never reaches the process list or the shell history.
 
 A query that matches more than one entry is an error, never a guess.
+
+list, get and totp open the vault, do one thing and exit. Browsing holds the
+vault open until you quit or it locks on idle.
 ";
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum Command {
+    Browse,
     List { query: Option<String> },
     Get { query: String },
     Totp { query: String },
@@ -73,12 +78,13 @@ where
     let mut words = words.into_iter();
     let Some(name) = words.next() else {
         return Ok(Parsed {
-            command: Command::Help,
+            command: Command::Browse,
             vault,
         });
     };
 
     let command = match name.as_str() {
+        "browse" => Command::Browse,
         "list" => Command::List {
             query: words.next(),
         },
@@ -113,11 +119,22 @@ mod tests {
     }
 
     #[test]
-    fn a_bare_invocation_asks_for_help() {
+    fn a_bare_invocation_opens_the_browser() {
         assert_eq!(
             parsed(&[]),
             Ok(Parsed {
-                command: Command::Help,
+                command: Command::Browse,
+                vault: None
+            })
+        );
+    }
+
+    #[test]
+    fn browse_can_also_be_asked_for_by_name() {
+        assert_eq!(
+            parsed(&["browse"]),
+            Ok(Parsed {
+                command: Command::Browse,
                 vault: None
             })
         );
