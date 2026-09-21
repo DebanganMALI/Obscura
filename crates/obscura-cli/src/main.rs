@@ -36,7 +36,10 @@ fn run() -> Result<()> {
             println!("obscura {}", env!("CARGO_PKG_VERSION"));
             Ok(())
         }
-        Command::List { query } => list(&open(parsed.vault)?, query.as_deref()),
+        Command::List { query } => {
+            list(&open(parsed.vault)?, query.as_deref());
+            Ok(())
+        }
         Command::Get { query } => get(&open(parsed.vault)?, &query),
         Command::Totp { query } => totp(&open(parsed.vault)?, &query),
     }
@@ -91,7 +94,7 @@ fn matching<'a>(vault: &'a Vault, query: &str) -> Result<&'a Entry> {
     Err(anyhow!("{message}"))
 }
 
-fn list(vault: &Vault, query: Option<&str>) -> Result<()> {
+fn list(vault: &Vault, query: Option<&str>) {
     let entries: Vec<&Entry> = match query {
         Some(text) => vault.search(text),
         None => vault.entries().iter().collect(),
@@ -99,7 +102,7 @@ fn list(vault: &Vault, query: Option<&str>) -> Result<()> {
 
     if entries.is_empty() {
         eprintln!("no entries");
-        return Ok(());
+        return;
     }
 
     let width = entries
@@ -112,7 +115,6 @@ fn list(vault: &Vault, query: Option<&str>) -> Result<()> {
         let line = format!("{:width$}  {}", entry.title, entry.username);
         println!("{}", line.trim_end());
     }
-    Ok(())
 }
 
 fn get(vault: &Vault, query: &str) -> Result<()> {

@@ -58,14 +58,21 @@ plainly rather than let people discover it.
 The Microsoft Store is the route to a signed binary, because Microsoft signs
 Store packages. `Obscura Vault` is reserved, product `9PB5FVD26LPM`.
 
-## 5. Decide on obscura-cli
+## 5. obscura-cli - settled
 
-A 144-byte stub at 0% coverage. Either build it out (`obscura unlock`,
-`obscura get <name>` - the only way to script the vault on Linux) or remove the
-crate. Shipping a repository containing an executable that does nothing invites
-someone to run it.
+Built out rather than removed. `obscura list`, `obscura get <query>` and
+`obscura totp <query>` - the only way to script the vault on Linux.
 
-Still open.
+Three rules are baked in. The master password is never an argument: it is read
+from the terminal without echo, or from stdin when stdin is not a terminal, so
+it never reaches the process list or the shell history. There is no background
+agent and no unlock cache - every command prompts and forgets, rather than a
+long lived process holding a vault key over a socket. And a query matching more
+than one entry is an error that lists the candidates, never a guess: printing
+the wrong password silently is the worst thing this tool could do.
+
+Secrets go to stdout and everything else to stderr, so `obscura totp github |
+wl-copy` copies six digits and nothing else.
 
 ## Store submission, outstanding
 
