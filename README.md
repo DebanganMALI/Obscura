@@ -41,11 +41,11 @@ Four ways in, and the vault tells you which of them travel with you.
 </p>
 
 <p align="center">
-  <img src="docs/screenshots/cli-browse.png" alt="The terminal browser" width="700">
+  <img src="docs/screenshots/cli-list.png" alt="The command line" width="760">
 </p>
 
-`obscura` on its own opens the vault in the terminal — the same entries, the
-same codes, no window manager required.
+The same vault from a terminal. `obscura` on its own opens a browsable view;
+`list`, `get` and `totp` are there to be scripted.
 
 ## Features
 
