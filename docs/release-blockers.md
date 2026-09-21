@@ -60,19 +60,24 @@ Store packages. `Obscura Vault` is reserved, product `9PB5FVD26LPM`.
 
 ## 5. obscura-cli - settled
 
-Built out rather than removed. `obscura list`, `obscura get <query>` and
-`obscura totp <query>` - the only way to script the vault on Linux.
+Built out rather than removed. `obscura` on its own browses the vault in the
+terminal; `obscura list`, `get <query>` and `totp <query>` script it.
 
 Three rules are baked in. The master password is never an argument: it is read
 from the terminal without echo, or from stdin when stdin is not a terminal, so
-it never reaches the process list or the shell history. There is no background
-agent and no unlock cache - every command prompts and forgets, rather than a
-long lived process holding a vault key over a socket. And a query matching more
-than one entry is an error that lists the candidates, never a guess: printing
-the wrong password silently is the worst thing this tool could do.
+it never reaches the process list or the shell history. Secrets go to stdout and
+everything else - banner, colour, countdown - to stderr, so `obscura totp github
+| wl-copy` copies six digits and nothing else. And a query matching more than
+one entry is an error that lists the candidates, never a guess: printing the
+wrong password silently is the worst thing this tool could do.
 
-Secrets go to stdout and everything else to stderr, so `obscura totp github |
-wl-copy` copies six digits and nothing else.
+On holding the key: `list`, `get` and `totp` open the vault, do one thing and
+exit. Browsing is different - it keeps the vault key in memory until you quit,
+so the earlier claim that every command prompts and forgets no longer covers the
+whole tool. It is still not an agent: there is no socket, no daemon and nothing
+cached on disk, so no other process can ask it for anything. It locks on idle on
+the same timer as the desktop application, and wipes the clipboard on the way
+out.
 
 ## Store submission, outstanding
 
