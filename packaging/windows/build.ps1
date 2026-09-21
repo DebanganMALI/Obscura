@@ -16,7 +16,9 @@ New-Item -ItemType Directory -Force -Path "$dist\Assets" | Out-Null
 New-Item -ItemType Directory -Force -Path $out | Out-Null
 
 Copy-Item target\release\obscura-app.exe "$dist\Obscura.exe"
-Copy-Item packaging\windows\Assets\*.png "$dist\Assets\"
+foreach ($logo in @("Square44x44Logo.png", "Square150x150Logo.png", "Square310x310Logo.png", "StoreLogo.png")) {
+    Copy-Item "src-tauri\icons\$logo" "$dist\Assets\$logo"
+}
 
 $manifest = [IO.File]::ReadAllText("packaging\windows\Package.appxmanifest")
 $manifest = [regex]::Replace($manifest, 'Version="\d+\.\d+\.\d+\.\d+"', "Version=`"$Version`"")
