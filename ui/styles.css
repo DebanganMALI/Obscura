@@ -158,16 +158,16 @@ button { cursor: pointer; background: none; border: none; }
   .gate__form {
     width: min(880px, 100%);
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: 483px 1fr;
     column-gap: 28px;
     align-items: start;
   }
   .gate__form .loc { margin-bottom: 0; }
   .gate__go {
-    grid-column: 1 / -1;
-    width: min(420px, 100%);
-    margin: 26px auto 0;
+    width: 100%;
+    flex-wrap: wrap;
   }
+  .gate__go > :last-child { flex-basis: 100%; text-align: left; }
 
   .gate__form--blocked {
     width: min(460px, 100%);
@@ -176,7 +176,17 @@ button { cursor: pointer; background: none; border: none; }
 }
 
 .gate__creds { min-width: 0; }
-.gate__go { min-width: 0; }
+.gate__go {
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  align-items: baseline;
+  gap: 1px 7px;
+  margin-top: 5px;
+  padding-left: 28px;
+}
+.gate__go .loc__alt { margin-top: 0; }
 
 @media (max-height: 700px) {
   .wordmark { font-size: clamp(38px, 9vh, 84px); margin: 8px 0 6px; }
