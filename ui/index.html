@@ -77,6 +77,15 @@
           <input class="input input--mono" type="password" id="gate-confirm"
                  placeholder="................" autocomplete="off" spellcheck="false">
         </div>
+
+        <p class="error" id="gate-error"></p>
+        <button class="btn btn--primary btn--block" type="submit" id="gate-submit">Unlock</button>
+
+        <div class="gate__go">
+          <button class="loc__alt center" type="button" id="gate-use-passkey" hidden>Unlock with a phone passkey</button>
+          <button class="loc__alt center" type="button" id="gate-use-hello" hidden>Unlock with Windows Hello</button>
+          <button class="loc__alt center" type="button" id="gate-use-recovery" hidden>Use a recovery code instead</button>
+        </div>
       </div>
 
       <div class="loc">
@@ -92,14 +101,6 @@
         <button class="loc__alt" type="button" id="loc-alt"></button>
         <label class="check"><input type="checkbox" id="loc-remember" checked>
           Remember this location</label>
-      </div>
-
-      <div class="gate__go">
-        <p class="error" id="gate-error"></p>
-        <button class="btn btn--primary btn--block" type="submit" id="gate-submit">Unlock</button>
-        <button class="loc__alt center" type="button" id="gate-use-recovery" hidden>Use a recovery code instead</button>
-        <button class="loc__alt center" type="button" id="gate-use-hello" hidden>Unlock with Windows Hello</button>
-        <button class="loc__alt center" type="button" id="gate-use-passkey" hidden>Unlock with a phone passkey</button>
       </div>
     </form>
   </section>
