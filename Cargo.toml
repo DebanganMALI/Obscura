@@ -5,7 +5,7 @@ members  = ["crates/*", "src-tauri"]
 [workspace.package]
 version      = "0.1.0"
 edition      = "2021"
-rust-version = "1.85"
+rust-version = "1.88"
 license      = "GPL-3.0-or-later"
 authors      = ["Debangan Mali <debanganmali99@gmail.com>"]
 repository   = "https://github.com/DebanganMALI/Obscura"
@@ -18,7 +18,7 @@ chacha20poly1305 = { version = "0.11", features = ["zeroize", "getrandom", "rand
 hkdf             = "0.13"
 sha2             = { version = "0.11", features = ["zeroize"] }
 blake3           = { version = "1", features = ["zeroize"] }
-x25519-dalek     = { version = "2", features = ["static_secrets", "zeroize", "getrandom"] }
+x25519-dalek     = { version = "3", features = ["static_secrets", "zeroize", "getrandom"] }
 ml-kem           = { version = "0.3", features = ["zeroize", "getrandom"] }
 subtle           = "2"
 hmac             = "0.13"
