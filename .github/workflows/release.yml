@@ -98,7 +98,7 @@ jobs:
             dist/*.rpm
             dist/*.AppImage
           sbom-path: dist/Obscura_${{ github.ref_name }}.cdx.json
-      - uses: softprops/action-gh-release@v2
+      - uses: softprops/action-gh-release@v3
         with:
           draft: true
           generate_release_notes: true
