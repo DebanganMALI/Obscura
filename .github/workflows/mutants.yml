@@ -37,7 +37,7 @@ jobs:
             --exclude-re 'replace < with <= in checksum' \
             --exclude-re 'replace format_version -> u16 with 1' \
             --exclude-re 'replace <impl Drop for Entry>::drop with \(\)'
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: mutants-out
