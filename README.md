@@ -4,7 +4,7 @@
 
 <p align="center">
   <a href="https://github.com/DebanganMALI/Obscura/actions/workflows/ci.yml"><img src="https://github.com/DebanganMALI/Obscura/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
-  <img src="https://img.shields.io/badge/rust-1.85%2B-e2e1d3" alt="Rust 1.85+">
+  <img src="https://img.shields.io/badge/rust-1.88%2B-e2e1d3" alt="Rust 1.88+">
   <img src="https://img.shields.io/badge/platform-windows%20%7C%20linux-9b9a8e" alt="Windows and Linux">
   <img src="https://img.shields.io/badge/licence-GPL--3.0--or--later-9b9a8e" alt="GPL-3.0-or-later">
 </p>

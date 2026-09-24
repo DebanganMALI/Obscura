@@ -22,4 +22,4 @@ anyhow         = { workspace = true }
 zeroize        = { workspace = true }
 arboard        = { workspace = true }
 rpassword      = { workspace = true }
-ratatui        = "0.29"
+ratatui        = "0.30"
