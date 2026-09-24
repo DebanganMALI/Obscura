@@ -363,8 +363,8 @@ $("gate-form").addEventListener("submit", async (event) => {
   if (!password) return;
 
   if (gateMode === "create") {
-    if (password.length < 8) {
-      error.textContent = "Use at least 8 characters.";
+    if ([...password].length < 15) {
+      error.textContent = "Use at least 15 characters. Four or five unrelated words are easier to remember than a short, clever password.";
       return;
     }
     if (password !== $("gate-confirm").value) {
