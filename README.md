@@ -100,7 +100,7 @@ can check yourself.
 
 ## Verifying what you downloaded
 
-Two checks, and the second is the one that matters.
+Three checks, and the second is the one that matters.
 
 **The checksum** tells you the file arrived intact. Every release includes a
 `SHA256SUMS` file.
@@ -125,6 +125,16 @@ A checksum only proves the file matches a list published beside it, so anyone
 able to replace the installer could replace the list too. An attestation cannot
 be forged without push access to this repository, and the log is append-only and
 public. If you verify one thing, verify this.
+
+**The bill of materials** tells you what went into it. Every release includes
+`Obscura_v0.1.0.cdx.json`, a CycloneDX SBOM listing each of the crates compiled
+into the application, with versions and licences, and it is attested against
+the installers the same way.
+
+```sh
+gh attestation verify Obscura_0.1.0_x64-setup.exe --repo DebanganMALI/Obscura \
+  --predicate-type https://cyclonedx.org/bom
+```
 
 ## Usage
 
