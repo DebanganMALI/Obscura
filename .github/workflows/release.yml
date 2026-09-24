@@ -35,7 +35,7 @@ jobs:
       - name: Install the Tauri CLI
         run: cargo install tauri-cli --version "^2" --locked
       - run: cargo tauri build
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: bundle-${{ matrix.os }}
           path: |
@@ -60,7 +60,7 @@ jobs:
           cargo cyclonedx --manifest-path src-tauri/Cargo.toml --format json --spec-version 1.5 --target all -q
           mkdir -p sbom
           cp src-tauri/obscura-app.cdx.json "sbom/Obscura_${GITHUB_REF_NAME}.cdx.json"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: sbom
           path: sbom/*.cdx.json
