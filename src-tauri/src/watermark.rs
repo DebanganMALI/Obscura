@@ -84,8 +84,8 @@ fn from_hex(text: &str) -> Option<[u8; TAG_LEN]> {
         return None;
     }
     let mut out = [0u8; TAG_LEN];
-    let bytes = text.as_bytes();
-    for (slot, pair) in out.iter_mut().zip(bytes.chunks_exact(2)) {
+    let (pairs, _) = text.as_bytes().as_chunks::<2>();
+    for (slot, pair) in out.iter_mut().zip(pairs) {
         let digits = std::str::from_utf8(pair).ok()?;
         *slot = u8::from_str_radix(digits, 16).ok()?;
     }
