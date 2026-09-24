@@ -60,6 +60,18 @@ jobs:
           cargo cyclonedx --manifest-path src-tauri/Cargo.toml --format json --spec-version 1.5 --target all -q
           mkdir -p sbom
           cp src-tauri/obscura-app.cdx.json "sbom/Obscura_${GITHUB_REF_NAME}.cdx.json"
+      - name: Give the SBOM a stable serial number
+        shell: python
+        run: |
+          import json, os, uuid
+          path = f"sbom/Obscura_{os.environ['GITHUB_REF_NAME']}.cdx.json"
+          with open(path, encoding="utf-8") as f:
+              bom = json.load(f)
+          release = f"https://github.com/{os.environ['GITHUB_REPOSITORY']}/releases/tag/{os.environ['GITHUB_REF_NAME']}"
+          bom["serialNumber"] = uuid.uuid5(uuid.NAMESPACE_URL, release).urn
+          with open(path, "w", encoding="utf-8") as f:
+              json.dump(bom, f, indent=2)
+              f.write("\n")
       - uses: actions/upload-artifact@v7
         with:
           name: sbom
