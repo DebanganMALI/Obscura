@@ -28,7 +28,7 @@ use crate::{
     watermark,
 };
 
-pub const MIN_PASSWORD_LEN: usize = 8;
+pub const MIN_PASSWORD_LEN: usize = 15;
 
 fn kind_name(kind: SlotKind) -> &'static str {
     match kind {
@@ -610,7 +610,7 @@ pub fn change_master_password<R: tauri::Runtime>(
 }
 
 fn check_new_password(password: &str, label: &str) -> Result<(), String> {
-    if password.len() < MIN_PASSWORD_LEN {
+    if password.chars().count() < MIN_PASSWORD_LEN {
         return Err(format!(
             "the {label} must be at least {MIN_PASSWORD_LEN} characters"
         ));
@@ -1559,6 +1559,17 @@ mod plain_parts {
             .contains("new password"));
         assert!(check_new_password(&long, "master password").is_ok());
     }
+
+    #[test]
+    fn a_new_master_password_is_counted_in_characters_not_bytes() {
+        let short = "\u{0986}".repeat(MIN_PASSWORD_LEN - 1);
+        let enough = "\u{0986}".repeat(MIN_PASSWORD_LEN);
+
+        assert!(short.len() > MIN_PASSWORD_LEN);
+        assert!(check_new_password(&short, "master password").is_err());
+        assert!(check_new_password(&enough, "master password").is_ok());
+    }
+
     #[test]
     fn a_file_that_is_not_a_vault_is_told_apart_from_no_file_at_all() {
         assert!(matches!(
