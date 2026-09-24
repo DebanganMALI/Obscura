@@ -46,9 +46,29 @@ jobs:
             target/release/bundle/appimage/*.AppImage
           if-no-files-found: error
 
+  sbom:
+    name: sbom
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install cargo-cyclonedx
+        run: cargo install cargo-cyclonedx --version 0.5.9 --locked
+      - name: Describe the application
+        run: |
+          export SOURCE_DATE_EPOCH="$(git log -1 --format=%ct)"
+          cargo cyclonedx --manifest-path src-tauri/Cargo.toml --format json --spec-version 1.5 --target all -q
+          mkdir -p sbom
+          cp src-tauri/obscura-app.cdx.json "sbom/Obscura_${GITHUB_REF_NAME}.cdx.json"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sbom
+          path: sbom/*.cdx.json
+          if-no-files-found: error
+
   release:
     name: draft the release
-    needs: bundle
+    needs: [bundle, sbom]
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-24.04
     permissions:
@@ -69,6 +89,15 @@ jobs:
       - uses: actions/attest-build-provenance@v2
         with:
           subject-path: "dist/*"
+      - uses: actions/attest-sbom@v2
+        with:
+          subject-path: |
+            dist/*.msi
+            dist/*.exe
+            dist/*.deb
+            dist/*.rpm
+            dist/*.AppImage
+          sbom-path: dist/Obscura_${{ github.ref_name }}.cdx.json
       - uses: softprops/action-gh-release@v2
         with:
           draft: true
