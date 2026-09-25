@@ -1,5 +1,5 @@
 param(
-    [string]$Version = "0.1.0.0",
+    [string]$Version = "0.1.1.0",
     [string]$Publisher = "CN=C2CC4240-9984-420A-8B9F-E6FE73010A59"
 )
 
