@@ -3,7 +3,7 @@ resolver = "2"
 members  = ["crates/*", "src-tauri"]
 
 [workspace.package]
-version      = "0.1.0"
+version      = "0.1.1"
 edition      = "2021"
 rust-version = "1.88"
 license      = "GPL-3.0-or-later"
@@ -43,10 +43,10 @@ tauri-plugin-dialog = "2"
 windows             = { version = "0.62", default-features = false }
 arboard     = { version = "3", default-features = false }
 
-obscura-crypto   = { path = "crates/obscura-crypto",   version = "0.1.0" }
-obscura-vault    = { path = "crates/obscura-vault",    version = "0.1.0" }
-obscura-platform = { path = "crates/obscura-platform", version = "0.1.0" }
-obscura-webauthn = { path = "crates/obscura-webauthn", version = "0.1.0" }
+obscura-crypto   = { path = "crates/obscura-crypto",   version = "0.1.1" }
+obscura-vault    = { path = "crates/obscura-vault",    version = "0.1.1" }
+obscura-platform = { path = "crates/obscura-platform", version = "0.1.1" }
+obscura-webauthn = { path = "crates/obscura-webauthn", version = "0.1.1" }
 
 [workspace.lints.rust]
 unsafe_code           = "warn"

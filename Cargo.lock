@@ -2885,7 +2885,7 @@ dependencies = [
 
 [[package]]
 name = "obscura-app"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "arboard",
  "obscura-crypto",
@@ -2905,7 +2905,7 @@ dependencies = [
 
 [[package]]
 name = "obscura-cli"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "arboard",
@@ -2917,7 +2917,7 @@ dependencies = [
 
 [[package]]
 name = "obscura-crypto"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "argon2",
  "blake3",
@@ -2934,7 +2934,7 @@ dependencies = [
 
 [[package]]
 name = "obscura-platform"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "obscura-crypto",
  "thiserror 2.0.20",
@@ -2943,7 +2943,7 @@ dependencies = [
 
 [[package]]
 name = "obscura-vault"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "ciborium",
  "csv",
@@ -2963,7 +2963,7 @@ dependencies = [
 
 [[package]]
 name = "obscura-webauthn"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "obscura-crypto",
  "thiserror 2.0.20",
