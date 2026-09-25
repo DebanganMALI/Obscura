@@ -80,11 +80,11 @@ Installers are attached to each [release](https://github.com/DebanganMALI/Obscur
 
 | Platform | File |
 | --- | --- |
-| Windows | `Obscura_0.1.0_x64-setup.exe` |
-| Windows, MSI | `Obscura_0.1.0_x64_en-US.msi` |
-| Debian, Ubuntu | `Obscura_0.1.0_amd64.deb` |
-| Fedora, RHEL | `Obscura-0.1.0-1.x86_64.rpm` |
-| Any Linux | `Obscura_0.1.0_amd64.AppImage` |
+| Windows | `Obscura_0.1.1_x64-setup.exe` |
+| Windows, MSI | `Obscura_0.1.1_x64_en-US.msi` |
+| Debian, Ubuntu | `Obscura_0.1.1_amd64.deb` |
+| Fedora, RHEL | `Obscura-0.1.1-1.x86_64.rpm` |
+| Any Linux | `Obscura_0.1.1_amd64.AppImage` |
 
 ### Windows will warn you
 
@@ -106,7 +106,7 @@ Three checks, and the second is the one that matters.
 `SHA256SUMS` file.
 
 ```powershell
-Get-FileHash .\Obscura_0.1.0_x64-setup.exe -Algorithm SHA256
+Get-FileHash .\Obscura_0.1.1_x64-setup.exe -Algorithm SHA256
 ```
 
 ```sh
@@ -118,7 +118,7 @@ carries a signed attestation, recorded in a public transparency log, naming the
 commit and the workflow run that produced it.
 
 ```sh
-gh attestation verify Obscura_0.1.0_x64-setup.exe --repo DebanganMALI/Obscura
+gh attestation verify Obscura_0.1.1_x64-setup.exe --repo DebanganMALI/Obscura
 ```
 
 A checksum only proves the file matches a list published beside it, so anyone
@@ -127,12 +127,12 @@ be forged without push access to this repository, and the log is append-only and
 public. If you verify one thing, verify this.
 
 **The bill of materials** tells you what went into it. Every release includes
-`Obscura_v0.1.0.cdx.json`, a CycloneDX SBOM listing each of the crates compiled
+`Obscura_v0.1.1.cdx.json`, a CycloneDX SBOM listing each of the crates compiled
 into the application, with versions and licences, and it is attested against
 the installers the same way.
 
 ```sh
-gh attestation verify Obscura_0.1.0_x64-setup.exe --repo DebanganMALI/Obscura \
+gh attestation verify Obscura_0.1.1_x64-setup.exe --repo DebanganMALI/Obscura \
   --predicate-type https://cyclonedx.org/bom
 ```
 
