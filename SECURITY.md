@@ -92,13 +92,20 @@ Following NIST SP 800-63B-4, because a stolen vault file is protected by the
 master password and Argon2id and nothing else:
 
 - At least 15 characters, counted as Unicode characters rather than bytes
+- Not on a list of about 29,000 commonly used passwords, compared without
+  regard to case, spaces or hyphens; the list is built from the SecLists
+  collections and ships inside the application, so the check never goes online
+- Not built from one short piece repeated, a handful of distinct characters, a
+  run along the alphabet or the keyboard, or the name of the application
 - No composition rules - no required digits, symbols or mixed case
 - No maximum below what a person would reasonably type
 - No forced periodic change
 
-The minimum applies when a password is chosen - creating a vault, setting a
-master password, changing it. A vault made before the minimum was raised still
-opens with its existing password.
+These rules apply when a password is chosen - creating a vault, setting a
+master password, changing it or resetting it with a recovery code. The strength
+meter in the interface asks the same Rust code, so it cannot disagree with the
+check that decides. A vault made before these rules still opens with its
+existing password.
 
 ## Verifying a release
 
@@ -134,8 +141,8 @@ proves which SBOM describes it.
   can reach swap or a crash dump before it is wiped.
 - The rollback watermark is a local file in the application config directory.
   An attacker who can delete it gets a vault that looks new to Obscura.
-- New master passwords are not yet checked against a list of common or breached
-  passwords, which NIST SP 800-63B-4 asks for.
+- The common-password list is a fixed snapshot. It is not a check against a
+  breach corpus such as Have I Been Pwned, which would need a network request.
 - Master passwords are not Unicode-normalised, so the same password typed with
   a different input method can produce different bytes and fail to unlock.
   Normalising now would lock out existing vaults with non-ASCII passwords.

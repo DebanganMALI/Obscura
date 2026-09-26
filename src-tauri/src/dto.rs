@@ -127,6 +127,13 @@ pub struct GeneratedPassword {
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct PasswordCheck {
+    pub score: u8,
+    pub problem: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct TotpCode {
     pub code: String,
     pub remaining: u64,
