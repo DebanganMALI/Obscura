@@ -105,6 +105,7 @@ pub struct VaultInfo {
     pub path: String,
     pub auto_lock_secs: u64,
     pub has_password: bool,
+    pub unlocked_by_recovery: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]
