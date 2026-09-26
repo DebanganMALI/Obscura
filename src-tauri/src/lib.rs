@@ -49,6 +49,7 @@ pub fn run() {
             commands::delete_entry,
             commands::totp_code,
             commands::generate,
+            commands::assess_password,
             commands::change_master_password,
             commands::set_master_password,
             commands::reset_master_password,
