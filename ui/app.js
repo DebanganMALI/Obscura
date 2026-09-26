@@ -37,25 +37,36 @@ function toast(message, kind) {
   toastTimer = setTimeout(() => el.classList.remove("show"), 2200);
 }
 
-function strength(password) {
-  if (!password) return 0;
-  let classes = 0;
-  if (/[a-z]/.test(password)) classes++;
-  if (/[A-Z]/.test(password)) classes++;
-  if (/[0-9]/.test(password)) classes++;
-  if (/[^a-zA-Z0-9]/.test(password)) classes++;
-  const bits = password.length * Math.log2(Math.max(classes * 20, 2));
-  if (bits < 45) return 1;
-  if (bits < 70) return 2;
-  if (bits < 100) return 3;
-  return 4;
-}
-
 function paintMeter(container, score) {
   const band = score <= 1 ? "on-weak" : score <= 2 ? "on-fair" : "on-strong";
   [...container.children].forEach((seg, i) => {
     seg.className = "meter__seg" + (i < score ? " " + band : "");
   });
+}
+
+function sentence(text) {
+  return text ? text.charAt(0).toUpperCase() + text.slice(1) + "." : "";
+}
+
+const meterTurns = new WeakMap();
+
+async function measure(password, meter, note) {
+  const turn = (meterTurns.get(meter) || 0) + 1;
+  meterTurns.set(meter, turn);
+  if (!password) {
+    paintMeter(meter, 0);
+    note.textContent = "";
+    return;
+  }
+  let check;
+  try {
+    check = await invoke("assess_password", { password });
+  } catch {
+    return;
+  }
+  if (meterTurns.get(meter) !== turn) return;
+  paintMeter(meter, check.score);
+  note.textContent = sentence(check.problem);
 }
 
 function initials(title) {
@@ -187,6 +198,7 @@ function applyGateMode() {
   $("gate-submit").hidden = gateBlocked;
   $("gate-confirm-field").hidden = gateBlocked || !creating;
   $("gate-meter").hidden = !creating;
+  $("gate-meter-note").hidden = !creating;
   $("gate-form").classList.toggle("gate__form--blocked", gateBlocked);
 
   if (gateBlocked) {
@@ -350,7 +362,7 @@ $("loc-default").addEventListener("click", async () => {
 });
 
 $("gate-password").addEventListener("input", (e) => {
-  if (gateMode === "create") paintMeter($("gate-meter"), strength(e.target.value));
+  if (gateMode === "create") measure(e.target.value, $("gate-meter"), $("gate-meter-note"));
 });
 
 $("gate-form").addEventListener("submit", async (event) => {
@@ -363,8 +375,9 @@ $("gate-form").addEventListener("submit", async (event) => {
   if (!password) return;
 
   if (gateMode === "create") {
-    if ([...password].length < 15) {
-      error.textContent = "Use at least 15 characters. Four or five unrelated words are easier to remember than a short, clever password.";
+    const check = await invoke("assess_password", { password }).catch(() => ({ problem: null }));
+    if (check.problem) {
+      error.textContent = sentence(check.problem) + " Four or five unrelated words are easier to remember than a short, clever password.";
       return;
     }
     if (password !== $("gate-confirm").value) {
@@ -987,7 +1000,7 @@ async function openSettings() {
   $("s-error").textContent = "";
   $("s-current").value = "";
   $("s-new").value = "";
-  paintMeter($("s-meter"), 0);
+  measure("", $("s-meter"), $("s-meter-note"));
   paintPasswordSection(info.hasPassword, info.unlockedByRecovery);
   $("s-loc-error").textContent = "";
   try {
@@ -1230,7 +1243,7 @@ function paintPasswordSection(hasPassword, recovered) {
     : hasPassword ? "Change password" : "Set a master password";
 }
 
-$("s-new").addEventListener("input", (e) => paintMeter($("s-meter"), strength(e.target.value)));
+$("s-new").addEventListener("input", (e) => measure(e.target.value, $("s-meter"), $("s-meter-note")));
 
 $("s-change").addEventListener("click", async () => {
   const error = $("s-error");
@@ -1250,7 +1263,7 @@ $("s-change").addEventListener("click", async () => {
     }
     $("s-current").value = "";
     $("s-new").value = "";
-    paintMeter($("s-meter"), 0);
+    measure("", $("s-meter"), $("s-meter-note"));
     toast(adding ? "Master password set" : resetting ? "Master password reset" : "Master password changed");
     await refresh();
     if (state.info) paintPasswordSection(state.info.hasPassword, state.info.unlockedByRecovery);
