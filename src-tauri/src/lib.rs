@@ -51,6 +51,7 @@ pub fn run() {
             commands::generate,
             commands::change_master_password,
             commands::set_master_password,
+            commands::reset_master_password,
             commands::create_recovery_code,
             commands::confirm_recovery_code,
             commands::discard_recovery_code,

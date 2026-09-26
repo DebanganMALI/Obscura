@@ -988,7 +988,7 @@ async function openSettings() {
   $("s-current").value = "";
   $("s-new").value = "";
   paintMeter($("s-meter"), 0);
-  paintPasswordSection(info.hasPassword);
+  paintPasswordSection(info.hasPassword, info.unlockedByRecovery);
   $("s-loc-error").textContent = "";
   try {
     const remembered = await invoke("remembered_location");
@@ -1030,13 +1030,16 @@ function renderSlots(slots) {
 
     const remove = h("button", "icon-btn");
     remove.append(icon("i-trash"));
+    const permanent = slot.kind === "password";
     const lastPortable = slot.portable && portable <= 1;
     const onlySlot = slots.length <= 1;
-    if (lastPortable || onlySlot) {
+    if (permanent || lastPortable || onlySlot) {
       remove.disabled = true;
-      remove.title = onlySlot
-        ? "This is the only way into the vault."
-        : "The last portable credential. Add a recovery code first, then this can go.";
+      remove.title = permanent
+        ? "The master password can be changed below, but never removed."
+        : onlySlot
+          ? "This is the only way into the vault."
+          : "The last portable credential. Add a recovery code first, then this can go.";
       remove.classList.add("icon-btn--off");
     } else {
       remove.title = "Remove " + slot.label;
@@ -1210,14 +1213,21 @@ $("s-autolock").addEventListener("input", async () => {
   await invoke("set_auto_lock", { seconds: Number($("s-autolock").value) * 60 });
 });
 
-function paintPasswordSection(hasPassword) {
-  $("s-current-field").hidden = !hasPassword;
-  $("s-password-label").textContent = hasPassword ? "Master password" : "No master password";
-  $("s-password-hint").textContent = hasPassword
-    ? ""
-    : "This vault opens with a recovery code only. Setting a master password gives you a second way in, and keeps the code as a spare.";
+function paintPasswordSection(hasPassword, recovered) {
+  const resetting = hasPassword && Boolean(recovered);
+  $("s-current-field").hidden = !hasPassword || resetting;
+  $("s-password-label").textContent = resetting
+    ? "Reset master password"
+    : hasPassword ? "Master password" : "No master password";
+  $("s-password-hint").textContent = resetting
+    ? "You unlocked with your recovery code, so you can set a new master password without the old one."
+    : hasPassword
+      ? ""
+      : "This vault opens with a recovery code only. Setting a master password gives you a second way in, and keeps the code as a spare.";
   $("s-new-label").textContent = hasPassword ? "New password" : "Master password";
-  $("s-change").textContent = hasPassword ? "Change password" : "Set a master password";
+  $("s-change").textContent = resetting
+    ? "Reset password"
+    : hasPassword ? "Change password" : "Set a master password";
 }
 
 $("s-new").addEventListener("input", (e) => paintMeter($("s-meter"), strength(e.target.value)));
@@ -1226,9 +1236,12 @@ $("s-change").addEventListener("click", async () => {
   const error = $("s-error");
   error.textContent = "";
   const adding = !(state.info && state.info.hasPassword);
+  const resetting = !adding && Boolean(state.info.unlockedByRecovery);
   try {
     if (adding) {
       state.info = await invoke("set_master_password", { password: $("s-new").value });
+    } else if (resetting) {
+      state.info = await invoke("reset_master_password", { new: $("s-new").value });
     } else {
       await invoke("change_master_password", {
         current: $("s-current").value,
@@ -1238,9 +1251,9 @@ $("s-change").addEventListener("click", async () => {
     $("s-current").value = "";
     $("s-new").value = "";
     paintMeter($("s-meter"), 0);
-    toast(adding ? "Master password set" : "Master password changed");
+    toast(adding ? "Master password set" : resetting ? "Master password reset" : "Master password changed");
     await refresh();
-    if (state.info) paintPasswordSection(state.info.hasPassword);
+    if (state.info) paintPasswordSection(state.info.hasPassword, state.info.unlockedByRecovery);
   } catch (err) {
     error.textContent = String(err);
   }
