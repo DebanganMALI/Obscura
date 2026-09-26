@@ -130,6 +130,7 @@ fn info(session: &Session, auto_lock_secs: u64) -> VaultInfo {
         path: session.path.display().to_string(),
         auto_lock_secs,
         has_password: session.vault.has_password(),
+        unlocked_by_recovery: session.unlocked_by_recovery,
     }
 }
 
@@ -609,6 +610,68 @@ pub fn change_master_password<R: tauri::Runtime>(
     })
 }
 
+#[tauri::command(async)]
+pub fn reset_master_password<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
+    state: State<'_, AppState>,
+    new: String,
+) -> Result<VaultInfo, String> {
+    let new = Zeroizing::new(new);
+    let secs = state.auto_lock().as_secs();
+
+    state.with_session(|session| {
+        reset_password(session, new.as_str())?;
+        let path = session.path.clone();
+        persist(&app, session, &path)?;
+        Ok(info(session, secs))
+    })
+}
+
+fn reset_password(session: &mut Session, password: &str) -> Result<(), String> {
+    if !session.unlocked_by_recovery {
+        return Err(
+            "a forgotten master password can only be reset after unlocking with your recovery code"
+                .to_owned(),
+        );
+    }
+    check_new_password(password, "new password")?;
+    if session.vault.has_password() {
+        session
+            .vault
+            .change_password(password.as_bytes(), None)
+            .map_err(|e| e.to_string())
+    } else {
+        session
+            .vault
+            .add_password(password.as_bytes(), None)
+            .map(|_| ())
+            .map_err(|e| e.to_string())
+    }
+}
+
+fn remove_unlock_method(
+    session: &mut Session,
+    id: Uuid,
+    expected: Option<SlotKind>,
+) -> Result<(), String> {
+    let Some(kind) = session
+        .vault
+        .slots()
+        .iter()
+        .find(|slot| slot.id == id)
+        .map(|slot| slot.kind)
+    else {
+        return Err("that unlock method is not on this vault".to_owned());
+    };
+    if kind == SlotKind::Password {
+        return Err("the master password can be changed but never removed".to_owned());
+    }
+    if expected.is_some_and(|wanted| wanted != kind) {
+        return Err("that unlock method cannot be removed from here".to_owned());
+    }
+    session.vault.remove_slot(id).map_err(|e| e.to_string())
+}
+
 fn check_new_password(password: &str, label: &str) -> Result<(), String> {
     if password.chars().count() < MIN_PASSWORD_LEN {
         return Err(format!(
@@ -944,7 +1007,7 @@ pub fn confirm_recovery_code<R: tauri::Runtime>(
 pub fn discard_recovery_code(state: State<'_, AppState>, id: Uuid) -> Result<VaultInfo, String> {
     let secs = state.auto_lock().as_secs();
     state.with_session(|session| {
-        session.vault.remove_slot(id).map_err(|e| e.to_string())?;
+        remove_unlock_method(session, id, Some(SlotKind::Recovery))?;
         Ok(info(session, secs))
     })
 }
@@ -974,7 +1037,8 @@ pub fn unlock_with_recovery<R: tauri::Runtime>(
     admit(&app, &vault, accept_revision)?;
     apply_remember(&app, &target, remember);
 
-    let session = Session::new(vault, target);
+    let mut session = Session::new(vault, target);
+    session.unlocked_by_recovery = true;
     let summary = info(&session, state.auto_lock().as_secs());
     state.set(session);
     Ok(summary)
@@ -988,7 +1052,7 @@ pub fn remove_slot<R: tauri::Runtime>(
 ) -> Result<VaultInfo, String> {
     let secs = state.auto_lock().as_secs();
     state.with_session(|session| {
-        session.vault.remove_slot(id).map_err(|e| e.to_string())?;
+        remove_unlock_method(session, id, None)?;
         let path = session.path.clone();
         persist(&app, session, &path)?;
         Ok(info(session, secs))
@@ -1035,7 +1099,7 @@ pub fn hello_forget<R: tauri::Runtime>(
     let secs = state.auto_lock().as_secs();
     state.with_session(|session| {
         let vault_id = session.vault.id().to_string();
-        session.vault.remove_slot(id).map_err(|e| e.to_string())?;
+        remove_unlock_method(session, id, Some(SlotKind::Hardware))?;
         hello::forget(&vault_id).map_err(|e| e.to_string())?;
         let path = session.path.clone();
         persist(&app, session, &path)?;
@@ -1986,6 +2050,101 @@ mod passkey_errors {
     fn anything_else_still_repeats_what_the_platform_said() {
         let error = E::Platform(0x8009_0027);
         assert!(shown(&error).contains(&error.to_string()));
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod unlock_methods {
+    use super::*;
+    use obscura_crypto::KdfParams;
+
+    const FAST: KdfParams = KdfParams {
+        m_cost_kib: 64 * 1024,
+        t_cost: 2,
+        p_cost: 1,
+    };
+
+    const OLD: &[u8] = b"correct horse battery staple";
+    const NEW: &str = "lantern mango quiet orbit tamarind";
+
+    fn a_session() -> (Session, Uuid, Uuid) {
+        let mut vault = Vault::create(OLD, FAST).unwrap();
+        let (recovery, _) = vault.add_recovery_slot("Printed code").unwrap();
+        let password = vault
+            .slots()
+            .iter()
+            .find(|slot| slot.kind == SlotKind::Password)
+            .unwrap()
+            .id;
+        (
+            Session::new(vault, PathBuf::from("vault.obscura")),
+            password,
+            recovery,
+        )
+    }
+
+    fn opens_with(session: &Session, password: &[u8]) -> bool {
+        session
+            .vault
+            .accepts(&Credential::Password(password))
+            .unwrap()
+    }
+
+    #[test]
+    fn the_master_password_is_never_removed_whatever_asks() {
+        let (mut session, password, _) = a_session();
+
+        for expected in [None, Some(SlotKind::Recovery), Some(SlotKind::Hardware)] {
+            let error = remove_unlock_method(&mut session, password, expected).unwrap_err();
+            assert!(error.contains("never removed"), "{error}");
+        }
+        assert!(session.vault.has_password());
+        assert!(opens_with(&session, OLD));
+    }
+
+    #[test]
+    fn other_unlock_methods_still_come_off() {
+        let (mut session, _, recovery) = a_session();
+        remove_unlock_method(&mut session, recovery, None).unwrap();
+        assert_eq!(session.vault.slots().len(), 1);
+    }
+
+    #[test]
+    fn a_removal_is_refused_when_it_names_a_different_kind() {
+        let (mut session, _, recovery) = a_session();
+        assert!(remove_unlock_method(&mut session, recovery, Some(SlotKind::Hardware)).is_err());
+        assert!(remove_unlock_method(&mut session, Uuid::new_v4(), None).is_err());
+        assert_eq!(session.vault.slots().len(), 2);
+    }
+
+    #[test]
+    fn a_session_opened_any_other_way_cannot_reset_the_password() {
+        let (mut session, _, _) = a_session();
+        let error = reset_password(&mut session, NEW).unwrap_err();
+        assert!(error.contains("recovery code"), "{error}");
+        assert!(opens_with(&session, OLD));
+    }
+
+    #[test]
+    fn a_session_opened_with_the_recovery_code_can_reset_the_password() {
+        let (mut session, _, _) = a_session();
+        session.unlocked_by_recovery = true;
+
+        reset_password(&mut session, NEW).unwrap();
+
+        assert!(opens_with(&session, NEW.as_bytes()));
+        assert!(!opens_with(&session, OLD));
+    }
+
+    #[test]
+    fn a_reset_password_still_has_to_meet_the_minimum() {
+        let (mut session, _, _) = a_session();
+        session.unlocked_by_recovery = true;
+
+        let error = reset_password(&mut session, "too short").unwrap_err();
+        assert!(error.contains(&MIN_PASSWORD_LEN.to_string()), "{error}");
+        assert!(opens_with(&session, OLD));
     }
 }
 
