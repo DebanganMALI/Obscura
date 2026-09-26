@@ -16,6 +16,7 @@ pub struct Session {
     pub last_activity: Instant,
     pub last_seen: SystemTime,
     pub min_revision: u64,
+    pub unlocked_by_recovery: bool,
 }
 
 impl Session {
@@ -27,6 +28,7 @@ impl Session {
             last_activity: Instant::now(),
             last_seen: SystemTime::now(),
             min_revision,
+            unlocked_by_recovery: false,
         }
     }
 
