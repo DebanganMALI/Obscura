@@ -20,15 +20,13 @@ use crate::{
     clipboard,
     dto::{
         CustomFieldView, EntryDetail, EntryInput, EntrySummary, ExportResult, GeneratedPassword,
-        ImportResult, IssuedRecoveryCode, LocationProbe, RelocateResult, SlotView, TotpCode,
-        UnlockError, VaultInfo,
+        ImportResult, IssuedRecoveryCode, LocationProbe, PasswordCheck, RelocateResult, SlotView,
+        TotpCode, UnlockError, VaultInfo,
     },
     location,
     state::{AppState, Session},
     watermark,
 };
-
-pub const MIN_PASSWORD_LEN: usize = 15;
 
 fn kind_name(kind: SlotKind) -> &'static str {
     match kind {
@@ -672,13 +670,24 @@ fn remove_unlock_method(
     session.vault.remove_slot(id).map_err(|e| e.to_string())
 }
 
-fn check_new_password(password: &str, label: &str) -> Result<(), String> {
-    if password.chars().count() < MIN_PASSWORD_LEN {
-        return Err(format!(
-            "the {label} must be at least {MIN_PASSWORD_LEN} characters"
-        ));
+#[tauri::command]
+#[must_use]
+pub fn assess_password(password: String) -> PasswordCheck {
+    let password = Zeroizing::new(password);
+    let assessment = obscura_vault::policy::assess(password.as_str());
+    PasswordCheck {
+        score: assessment.score,
+        problem: assessment
+            .weakness
+            .map(|weakness| weakness.describe("password")),
     }
-    Ok(())
+}
+
+fn check_new_password(password: &str, label: &str) -> Result<(), String> {
+    match obscura_vault::policy::weakness(password) {
+        Some(weakness) => Err(weakness.describe(label)),
+        None => Ok(()),
+    }
 }
 
 fn check_destination(target: &std::path::Path) -> Result<(), String> {
@@ -1611,25 +1620,48 @@ mod plain_parts {
 
     #[test]
     fn a_new_master_password_is_measured_and_the_message_says_which_one() {
-        let short = "a".repeat(MIN_PASSWORD_LEN - 1);
-        let long = "a".repeat(MIN_PASSWORD_LEN);
+        let short = "a".repeat(obscura_vault::MIN_PASSWORD_CHARS - 1);
+        let long = "lantern mango quiet orbit";
 
         let error = check_new_password(&short, "master password").unwrap_err();
         assert!(error.contains("master password"), "{error}");
-        assert!(error.contains(&MIN_PASSWORD_LEN.to_string()), "{error}");
+        assert!(
+            error.contains(&obscura_vault::MIN_PASSWORD_CHARS.to_string()),
+            "{error}"
+        );
 
         assert!(check_new_password(&short, "new password")
             .unwrap_err()
             .contains("new password"));
-        assert!(check_new_password(&long, "master password").is_ok());
+        assert!(check_new_password(long, "master password").is_ok());
+    }
+
+    #[test]
+    fn a_common_master_password_is_refused_and_the_message_says_which_one() {
+        let error = check_new_password("Correct Horse Battery Staple", "new password").unwrap_err();
+        assert!(error.contains("new password"), "{error}");
+        assert!(error.contains("common"), "{error}");
+    }
+
+    #[test]
+    fn the_meter_reports_the_same_verdict_as_the_check() {
+        let weak = assess_password("correcthorsebatterystaple".to_owned());
+        assert_eq!(weak.score, 1);
+        assert!(weak.problem.unwrap().contains("common"));
+
+        let fine = assess_password("lantern mango quiet orbit tamarind".to_owned());
+        assert!(fine.score >= 3);
+        assert!(fine.problem.is_none());
+
+        assert_eq!(assess_password(String::new()).score, 0);
     }
 
     #[test]
     fn a_new_master_password_is_counted_in_characters_not_bytes() {
-        let short = "\u{0986}".repeat(MIN_PASSWORD_LEN - 1);
-        let enough = "\u{0986}".repeat(MIN_PASSWORD_LEN);
+        let short = "\u{0986}".repeat(obscura_vault::MIN_PASSWORD_CHARS - 1);
+        let enough: String = ('\u{0995}'..='\u{09A3}').collect();
 
-        assert!(short.len() > MIN_PASSWORD_LEN);
+        assert!(short.len() > obscura_vault::MIN_PASSWORD_CHARS);
         assert!(check_new_password(&short, "master password").is_err());
         assert!(check_new_password(&enough, "master password").is_ok());
     }
@@ -2143,7 +2175,10 @@ mod unlock_methods {
         session.unlocked_by_recovery = true;
 
         let error = reset_password(&mut session, "too short").unwrap_err();
-        assert!(error.contains(&MIN_PASSWORD_LEN.to_string()), "{error}");
+        assert!(
+            error.contains(&obscura_vault::MIN_PASSWORD_CHARS.to_string()),
+            "{error}"
+        );
         assert!(opens_with(&session, OLD));
     }
 }
@@ -2247,7 +2282,7 @@ mod wiring {
     use super::*;
     use tauri::test::{mock_builder, mock_context, noop_assets};
 
-    const PASSWORD: &str = "correct horse battery staple";
+    const PASSWORD: &str = "lantern mango quiet orbit tamarind";
 
     struct Fixture {
         app: tauri::App<tauri::test::MockRuntime>,
