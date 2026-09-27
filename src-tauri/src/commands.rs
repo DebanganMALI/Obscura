@@ -1875,22 +1875,22 @@ mod admission_rules {
     #[test]
     fn an_unreadable_watermark_is_rewritten_only_once_the_user_has_agreed() {
         let told = refusal(admission(
-            Verdict::Unreadable("the book is not valid json".to_owned()),
+            Verdict::Unreadable("the record is not valid json".to_owned()),
             REVISION,
             None,
         ));
-        assert!(told.contains("the book is not valid json"), "{told}");
+        assert!(told.contains("the record is not valid json"), "{told}");
 
         assert!(
             matches!(
                 admission(
-                    Verdict::Unreadable("the book is not valid json".to_owned()),
+                    Verdict::Unreadable("the record is not valid json".to_owned()),
                     REVISION,
                     Some(REVISION)
                 ),
                 Admission::Reset
             ),
-            "an unreadable book is replaced rather than appended to, and only on agreement"
+            "an unreadable record is replaced only on agreement"
         );
     }
 }

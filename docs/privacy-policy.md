@@ -29,9 +29,10 @@ inside it, encrypted. Obscura never writes them anywhere else.
 **A settings file** in your user configuration directory remembers where your
 vault is and how long before it locks itself. It contains no secrets.
 
-**A rollback record** in the same directory holds one number and one
-authentication tag per vault, so Obscura can notice if an older copy of your
-vault is put back in place. It contains no secrets and no entry data.
+**A rollback record** for each vault, in a `watermarks` folder in the same
+directory, holds one number and one authentication tag, so Obscura can notice if
+an older copy of your vault is put back in place. It contains no secrets and no
+entry data.
 
 Uninstalling removes the application. Your vault file is yours and stays where
 you put it.

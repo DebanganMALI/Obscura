@@ -10,11 +10,9 @@ use obscura_vault::Vault;
 use serde::{Deserialize, Serialize};
 use tauri::Manager;
 
-const FILE: &str = "watermarks.json";
+const LEGACY: &str = "watermarks.json";
 
-const TEMP: &str = "watermarks.json.tmp";
-
-const DAMAGED: &str = "watermarks.damaged.json";
+const RECORDS: &str = "watermarks";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -42,19 +40,52 @@ fn config_dir<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> Result<PathBuf, S
     Ok(dir)
 }
 
-fn read_book(path: &Path) -> Result<Book, String> {
-    let text = match fs::read_to_string(path) {
-        Ok(text) => text,
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Book::new()),
-        Err(e) => return Err(format!("cannot read {}: {e}", path.display())),
-    };
-    serde_json::from_str(&text).map_err(|e| format!("{} is not readable: {e}", path.display()))
+fn record_path(dir: &Path, vault: &Vault) -> PathBuf {
+    dir.join(RECORDS).join(format!("{}.json", vault.id()))
 }
 
-fn write_book(dir: &Path, book: &Book) -> Result<(), String> {
-    let text =
-        serde_json::to_string_pretty(book).map_err(|e| format!("cannot encode {FILE}: {e}"))?;
-    let temp = dir.join(TEMP);
+fn aside_path(dir: &Path, vault: &Vault) -> PathBuf {
+    dir.join(RECORDS)
+        .join(format!("{}.damaged.json", vault.id()))
+}
+
+fn temp_path(dir: &Path, vault: &Vault) -> PathBuf {
+    dir.join(RECORDS).join(format!("{}.json.tmp", vault.id()))
+}
+
+fn read_text(path: &Path) -> Result<Option<String>, String> {
+    match fs::read_to_string(path) {
+        Ok(text) => Ok(Some(text)),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(e) => Err(format!("cannot read {}: {e}", path.display())),
+    }
+}
+
+fn read_record(path: &Path) -> Result<Option<Record>, String> {
+    let Some(text) = read_text(path)? else {
+        return Ok(None);
+    };
+    serde_json::from_str(&text)
+        .map(Some)
+        .map_err(|e| format!("{} is not readable: {e}", path.display()))
+}
+
+fn read_legacy(dir: &Path, vault: &Vault) -> Result<Option<Record>, String> {
+    let path = dir.join(LEGACY);
+    let Some(text) = read_text(&path)? else {
+        return Ok(None);
+    };
+    let book: Book = serde_json::from_str(&text)
+        .map_err(|e| format!("{} is not readable: {e}", path.display()))?;
+    Ok(book.get(&vault.id().to_string()).cloned())
+}
+
+fn write_record(dir: &Path, vault: &Vault, record: &Record) -> Result<(), String> {
+    let folder = dir.join(RECORDS);
+    fs::create_dir_all(&folder).map_err(|e| format!("cannot create {}: {e}", folder.display()))?;
+    let text = serde_json::to_string_pretty(record)
+        .map_err(|e| format!("cannot encode the rollback record: {e}"))?;
+    let temp = temp_path(dir, vault);
     {
         let mut file = fs::File::create(&temp)
             .map_err(|e| format!("cannot create {}: {e}", temp.display()))?;
@@ -63,7 +94,7 @@ fn write_book(dir: &Path, book: &Book) -> Result<(), String> {
         file.sync_all()
             .map_err(|e| format!("cannot flush {}: {e}", temp.display()))?;
     }
-    let target = dir.join(FILE);
+    let target = record_path(dir, vault);
     fs::rename(&temp, &target).map_err(|e| {
         let _ = fs::remove_file(&temp);
         format!("cannot replace {}: {e}", target.display())
@@ -111,13 +142,19 @@ pub fn check<R: tauri::Runtime>(app: &tauri::AppHandle<R>, vault: &Vault) -> Ver
 }
 
 pub fn check_in(dir: &Path, vault: &Vault) -> Verdict {
-    let book = match read_book(&dir.join(FILE)) {
-        Ok(book) => book,
-        Err(reason) => return Verdict::Unreadable(reason),
+    let found = match read_record(&record_path(dir, vault)) {
+        Ok(Some(record)) => Ok(Some(record)),
+        Ok(None) => read_legacy(dir, vault),
+        Err(reason) => Err(reason),
     };
-    let Some(record) = book.get(&vault.id().to_string()) else {
-        return Verdict::Fresh;
-    };
+    match found {
+        Ok(Some(record)) => judge(vault, &record),
+        Ok(None) => Verdict::Fresh,
+        Err(reason) => Verdict::Unreadable(reason),
+    }
+}
+
+fn judge(vault: &Vault, record: &Record) -> Verdict {
     let Some(tag) = from_hex(&record.tag) else {
         return Verdict::Tampered;
     };
@@ -141,9 +178,7 @@ pub fn record<R: tauri::Runtime>(app: &tauri::AppHandle<R>, vault: &Vault) -> Re
 }
 
 pub fn record_in(dir: &Path, vault: &Vault) -> Result<(), String> {
-    let mut book = read_book(&dir.join(FILE))?;
-    book.insert(vault.id().to_string(), entry_for(vault)?);
-    write_book(dir, &book)
+    write_record(dir, vault, &entry_for(vault)?)
 }
 
 pub fn reset_to<R: tauri::Runtime>(app: &tauri::AppHandle<R>, vault: &Vault) -> Result<(), String> {
@@ -151,14 +186,12 @@ pub fn reset_to<R: tauri::Runtime>(app: &tauri::AppHandle<R>, vault: &Vault) -> 
 }
 
 pub fn reset_to_in(dir: &Path, vault: &Vault) -> Result<(), String> {
-    let existing = dir.join(FILE);
+    let existing = record_path(dir, vault);
     if existing.exists() {
-        fs::rename(&existing, dir.join(DAMAGED))
+        fs::rename(&existing, aside_path(dir, vault))
             .map_err(|e| format!("cannot set {} aside: {e}", existing.display()))?;
     }
-    let mut book = Book::new();
-    book.insert(vault.id().to_string(), entry_for(vault)?);
-    write_book(dir, &book)
+    record_in(dir, vault)
 }
 
 #[cfg(test)]
@@ -172,16 +205,24 @@ mod tests {
         dir
     }
 
-    fn book_of(id: &str, revision: u64) -> Book {
+    const FAST: obscura_crypto::KdfParams = obscura_crypto::KdfParams {
+        m_cost_kib: 64 * 1024,
+        t_cost: 2,
+        p_cost: 1,
+    };
+
+    const PASSWORD: &[u8] = b"correct horse battery staple";
+
+    fn a_vault() -> Vault {
+        Vault::create(PASSWORD, FAST).unwrap()
+    }
+
+    fn write_legacy(dir: &Path, vaults: &[&Vault]) {
         let mut book = Book::new();
-        book.insert(
-            id.to_owned(),
-            Record {
-                revision,
-                tag: to_hex(&[0x11u8; TAG_LEN]),
-            },
-        );
-        book
+        for vault in vaults {
+            book.insert(vault.id().to_string(), entry_for(vault).unwrap());
+        }
+        fs::write(dir.join(LEGACY), serde_json::to_string(&book).unwrap()).unwrap();
     }
 
     #[test]
@@ -202,78 +243,37 @@ mod tests {
     }
 
     #[test]
-    fn a_book_that_was_never_written_is_empty() {
+    fn a_record_that_was_never_written_is_absent() {
         let dir = scratch();
-        assert!(read_book(&dir.join(FILE)).unwrap().is_empty());
+        let vault = a_vault();
+        assert!(read_record(&record_path(&dir, &vault)).unwrap().is_none());
         fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]
-    fn a_book_that_does_not_parse_is_an_error_rather_than_an_empty_one() {
+    fn a_record_that_does_not_parse_is_an_error_rather_than_an_absent_one() {
         let dir = scratch();
-        fs::write(dir.join(FILE), "{ not json").unwrap();
+        let vault = a_vault();
+        fs::create_dir_all(dir.join(RECORDS)).unwrap();
+        fs::write(record_path(&dir, &vault), "{ not json").unwrap();
         assert!(
-            read_book(&dir.join(FILE)).is_err(),
-            "a book that fails to parse must not read as no records at all - that would make \
-             every vault look fresh and silently retire rollback protection for all of them"
+            read_record(&record_path(&dir, &vault)).is_err(),
+            "a record that fails to parse must not read as no record at all - that would make \
+             the vault look fresh and silently retire its rollback protection"
         );
         fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]
-    fn a_book_survives_a_round_trip_and_leaves_no_temporary_behind() {
+    fn recording_leaves_no_temporary_behind_and_a_torn_one_is_ignored() {
         let dir = scratch();
-        write_book(&dir, &book_of("a", 7)).unwrap();
+        let vault = a_vault();
+        record_in(&dir, &vault).unwrap();
+        assert!(!temp_path(&dir, &vault).exists());
 
-        let back = read_book(&dir.join(FILE)).unwrap();
-        assert_eq!(back.get("a").unwrap().revision, 7);
-        assert!(!dir.join(TEMP).exists());
+        fs::write(temp_path(&dir, &vault), "{ half-written").unwrap();
+        assert!(matches!(check_in(&dir, &vault), Verdict::Current));
         fs::remove_dir_all(&dir).unwrap();
-    }
-
-    #[test]
-    fn a_second_write_replaces_the_first_whole() {
-        let dir = scratch();
-        write_book(&dir, &book_of("a", 7)).unwrap();
-
-        let mut next = read_book(&dir.join(FILE)).unwrap();
-        next.insert(
-            "b".to_owned(),
-            Record {
-                revision: 2,
-                tag: to_hex(&[0x22u8; TAG_LEN]),
-            },
-        );
-        write_book(&dir, &next).unwrap();
-
-        let back = read_book(&dir.join(FILE)).unwrap();
-        assert_eq!(back.len(), 2);
-        assert_eq!(back.get("a").unwrap().revision, 7);
-        assert_eq!(back.get("b").unwrap().revision, 2);
-        fs::remove_dir_all(&dir).unwrap();
-    }
-
-    #[test]
-    fn a_torn_temporary_file_is_not_mistaken_for_the_book() {
-        let dir = scratch();
-        write_book(&dir, &book_of("a", 7)).unwrap();
-        fs::write(dir.join(TEMP), "{ half-written").unwrap();
-
-        let back = read_book(&dir.join(FILE)).unwrap();
-        assert_eq!(back.get("a").unwrap().revision, 7);
-        fs::remove_dir_all(&dir).unwrap();
-    }
-
-    const FAST: obscura_crypto::KdfParams = obscura_crypto::KdfParams {
-        m_cost_kib: 64 * 1024,
-        t_cost: 2,
-        p_cost: 1,
-    };
-
-    const PASSWORD: &[u8] = b"correct horse battery staple";
-
-    fn a_vault() -> Vault {
-        Vault::create(PASSWORD, FAST).unwrap()
     }
 
     #[test]
@@ -329,9 +329,9 @@ mod tests {
         record_in(&dir, &vault).unwrap();
 
         for spoiled in ["00".repeat(TAG_LEN), "not hexadecimal".to_owned()] {
-            let mut book = read_book(&dir.join(FILE)).unwrap();
-            book.get_mut(&vault.id().to_string()).unwrap().tag = spoiled.clone();
-            write_book(&dir, &book).unwrap();
+            let mut record = read_record(&record_path(&dir, &vault)).unwrap().unwrap();
+            record.tag = spoiled.clone();
+            write_record(&dir, &vault, &record).unwrap();
 
             assert!(
                 matches!(check_in(&dir, &vault), Verdict::Tampered),
@@ -343,29 +343,87 @@ mod tests {
     }
 
     #[test]
-    fn resetting_sets_the_old_book_aside_and_keeps_only_this_vault() {
+    fn resetting_one_vault_leaves_every_other_vault_protected() {
         let dir = scratch();
         let vault = a_vault();
         let stranger = a_vault();
 
         record_in(&dir, &stranger).unwrap();
         record_in(&dir, &vault).unwrap();
-        fs::write(dir.join(FILE), b"{ this is not json").unwrap();
+        fs::write(record_path(&dir, &vault), b"{ this is not json").unwrap();
         assert!(matches!(check_in(&dir, &vault), Verdict::Unreadable(_)));
+        assert!(matches!(check_in(&dir, &stranger), Verdict::Current));
 
         reset_to_in(&dir, &vault).unwrap();
 
         assert!(
-            dir.join(DAMAGED).exists(),
-            "the unreadable book is set aside rather than deleted, because it is the only \
+            aside_path(&dir, &vault).exists(),
+            "the unreadable record is set aside rather than deleted, because it is the only \
              evidence of whatever spoiled it"
         );
         assert!(matches!(check_in(&dir, &vault), Verdict::Current));
         assert!(
-            matches!(check_in(&dir, &stranger), Verdict::Fresh),
-            "resetting keeps only the vault being opened, so every other vault loses its \
-              rollback protection and silently becomes fresh again"
+            matches!(check_in(&dir, &stranger), Verdict::Current),
+            "resetting one vault must never make another look new"
         );
+
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn a_record_in_the_old_shared_book_still_protects_its_vault() {
+        let dir = scratch();
+        let mut vault = a_vault();
+
+        let older = vault.to_bytes().unwrap();
+        let _newer = vault.to_bytes().unwrap();
+        write_legacy(&dir, &[&vault]);
+        assert!(matches!(check_in(&dir, &vault), Verdict::Current));
+
+        let restored =
+            Vault::from_bytes(&older, &obscura_vault::Credential::Password(PASSWORD), None)
+                .unwrap();
+        assert!(matches!(
+            check_in(&dir, &restored),
+            Verdict::Rollback { .. }
+        ));
+
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn a_vault_record_of_its_own_takes_precedence_over_the_old_book() {
+        let dir = scratch();
+        let mut vault = a_vault();
+
+        write_legacy(&dir, &[&vault]);
+        let _newer = vault.to_bytes().unwrap();
+        record_in(&dir, &vault).unwrap();
+        fs::write(dir.join(LEGACY), "{ not json").unwrap();
+
+        assert!(matches!(check_in(&dir, &vault), Verdict::Current));
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn a_damaged_old_book_asks_about_each_vault_and_resetting_one_leaves_the_rest_asking() {
+        let dir = scratch();
+        let vault = a_vault();
+        let stranger = a_vault();
+
+        fs::write(dir.join(LEGACY), "{ not json").unwrap();
+        assert!(matches!(check_in(&dir, &vault), Verdict::Unreadable(_)));
+        assert!(matches!(check_in(&dir, &stranger), Verdict::Unreadable(_)));
+
+        reset_to_in(&dir, &vault).unwrap();
+
+        assert!(matches!(check_in(&dir, &vault), Verdict::Current));
+        assert!(
+            matches!(check_in(&dir, &stranger), Verdict::Unreadable(_)),
+            "a vault that may have had a record in the damaged book must still be asked about, \
+             never quietly treated as new"
+        );
+        assert!(dir.join(LEGACY).exists());
 
         fs::remove_dir_all(&dir).unwrap();
     }
