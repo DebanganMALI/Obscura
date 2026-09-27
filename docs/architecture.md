@@ -145,10 +145,19 @@ tag over `vault_id || revision` outside the file, and checks it at every unlock.
 | `Current` | Revision matches the tag. |
 | `Rollback` | The file is older than the tag. Someone restored a backup. |
 | `Tampered` | The revision matches but the tag does not verify. |
-| `Unreadable` | The watermark store is damaged or missing. |
+| `Unreadable` | This vault's record exists but cannot be read. |
 
 Everything except `Current` and `Fresh` stops the unlock and asks the user,
 naming the revision, rather than silently accepting or silently refusing.
+
+Each vault's record is its own file, `watermarks/<vault id>.json` in the
+application config directory, written through a temporary file and a rename.
+One damaged record therefore affects one vault: agreeing to continue sets that
+file aside as `<vault id>.damaged.json` and records the vault afresh, and no
+other vault's record is read or rewritten. Records from the earlier single
+`watermarks.json` are still honoured for any vault that has no file of its own
+yet, and if that old file cannot be read, each vault that might have been in it
+is asked about separately.
 
 ## Unlocking, step by step
 
