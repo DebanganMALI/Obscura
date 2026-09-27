@@ -222,7 +222,7 @@ impl UnlockError {
     pub fn unreadable(found: u64, detail: impl Into<String>) -> Self {
         Self {
             message: format!(
-                "Obscura keeps a rollback record for every vault it has opened on this computer, and that file could not be read: {}. Until it is rebuilt, Obscura cannot tell whether this file has been rolled back. The file itself is at revision {found}. Continuing sets the unreadable record aside as watermarks.damaged.json and starts a new one holding this vault alone, so any other vault you open afterwards will look new to Obscura.",
+                "Obscura keeps a rollback record for each vault it has opened on this computer, and the record for this vault could not be read: {}. Until it is rebuilt, Obscura cannot tell whether this file has been rolled back. The file itself is at revision {found}. Continuing sets the unreadable record aside and starts a new one for this vault. The records of your other vaults are not touched.",
                 detail.into()
             ),
             confirm: Some(ConfirmRevision {

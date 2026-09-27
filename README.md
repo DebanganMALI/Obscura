@@ -322,7 +322,7 @@ Planned for 0.2.0, roughly in this order:
 
 - [x] Refuse common, repetitive and sequential master passwords, with the
       strength meter computed in Rust
-- [ ] Keep each vault's rollback watermark independent, so resetting one never
+- [x] Keep each vault's rollback watermark independent, so resetting one never
       weakens another
 - [ ] Automated tests for the interface, using Node's built-in test runner and
       still no npm dependencies

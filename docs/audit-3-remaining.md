@@ -49,9 +49,10 @@ Tests went 211 -> 271.
 Two things were written down rather than changed, because both are defensible
 but neither was recorded anywhere:
 
-- `watermark::reset_to` keeps only the vault being opened, so every other vault
-  silently loses its rollback protection. A book that will not parse cannot be
-  trusted for any vault, so this is arguable - but it should be a decision.
+- `watermark::reset_to` kept only the vault being opened, so every other vault
+  silently lost its rollback protection. Decided and fixed: each vault now has
+  its own record file, a reset rewrites only that file, and a damaged record
+  from the old shared file makes each affected vault ask rather than look new.
 - `clipboard::copy_with_timeout` writes to the real system clipboard and takes
   no handle, so testing it would clobber whatever the developer had copied. It
   stays untested on purpose. `exclude_from_monitoring` is the security-relevant
