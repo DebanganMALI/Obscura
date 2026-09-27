@@ -20,9 +20,10 @@ what they claim to be.
 No account. No telemetry. No network code at all — not a disabled feature, but
 an application with no HTTP client in it.
 
-> **Status: first public release.** Obscura has not been independently audited
-> and the interface has no automated test coverage. Keep a second copy of
-> anything you cannot afford to lose.
+> **Status: early releases, 0.1.x.** Obscura has not been independently audited
+> and the interface has no automated test coverage yet. Keep a second copy of
+> anything you cannot afford to lose. What is being built next is listed under
+> [Roadmap](#roadmap).
 
 ## Screenshots
 
@@ -59,6 +60,11 @@ The same vault from a terminal. `obscura` on its own opens a browsable view;
   opened in fifteen years by a machine that breaks the classical half
 - **Four ways to unlock** — master password, Windows Hello, a phone or tablet
   passkey, or a printed recovery code
+- **A master password that can be changed but never removed**, and a recovery
+  code that resets it when it is forgotten
+- **A master password policy that follows NIST SP 800-63B-4** — at least 15
+  characters, checked offline against about 29,000 common passwords, with no
+  composition rules and no forced expiry
 - **Rollback detection** — a keyed BLAKE3 watermark kept outside the vault and
   checked at every unlock, so a restored older copy is noticed rather than
   silently accepted
@@ -146,6 +152,36 @@ setup — there is nothing to sign up for.
 Add a recovery code before you add anything you care about. It is the only
 unlock method that survives losing both your memory and your machine, and
 Obscura will not let you remove your last portable one.
+
+### Choosing a master password
+
+A stolen vault file is protected by the master password and Argon2id and
+nothing else, so Obscura is strict about the one and generous about the other.
+
+| Rule | Why |
+| --- | --- |
+| At least 15 characters | Counted as characters, not bytes, so a Bengali or Hindi password is measured the same way as an English one |
+| Not a common password | Compared against about 29,000 entries from the SecLists collections, ignoring case, spaces and hyphens, so `Correct-Horse-Battery-Staple` is caught too |
+| Not a pattern | One short piece repeated, a handful of distinct characters, or a run along the alphabet or keyboard such as `1qaz2wsx3edc4rfv` |
+| Not the app's name | `obscura` does not count towards the fifteen characters |
+| No composition rules | Four or five unrelated words beat a short string of symbols, and are far easier to remember |
+
+The list ships inside the application, so checking a password never sends it
+anywhere. The strength meter asks the same Rust code that makes the final
+decision, so it cannot show green for a password that will then be refused, and
+it tells you which rule a password breaks while you type. A vault created before
+these rules still opens with its existing password.
+
+### If you forget the master password
+
+The master password can be changed from Settings but never deleted, so a vault
+always has one. If you forget it, unlock with your recovery code: Settings then
+offers **Reset master password**, which sets a new one without asking for the
+old. The same rules apply to the new password.
+
+Without a recovery code, a Windows Hello or passkey slot still opens the vault,
+but only a recovery code unlock can reset the password. With none of these, a
+forgotten master password ends the vault. There is no server holding a copy.
 
 ### The command line
 
@@ -279,6 +315,28 @@ What the suite does **not** cover, and why, is in
 [docs/mutation-testing.md](docs/mutation-testing.md). The short version: the
 interface has no automated tests at all, and every bug found by using the
 application this month was found by clicking, not by a test.
+
+## Roadmap
+
+Planned for 0.2.0, roughly in this order:
+
+- [x] Refuse common, repetitive and sequential master passwords, with the
+      strength meter computed in Rust
+- [ ] Keep each vault's rollback watermark independent, so resetting one never
+      weakens another
+- [ ] Automated tests for the interface, using Node's built-in test runner and
+      still no npm dependencies
+- [ ] Tests for the terminal browser against ratatui's test backend
+- [ ] Ship the `obscura` command line tool as a release download
+- [ ] Run the application-level tests on Windows as well as Linux
+- [ ] A password health view: reused, weak and old passwords, computed locally
+- [ ] Lock secret memory pages with `VirtualLock` and `mlock`, so keys cannot be
+      written to swap
+- [ ] A written threat model, and a security posture document mapped to the
+      ISO/IEC 27001:2022 Annex A controls that apply to a single application
+
+Later: Unicode normalisation of master passwords, which needs a migration path
+so existing non-ASCII passwords keep working.
 
 ## Security
 
