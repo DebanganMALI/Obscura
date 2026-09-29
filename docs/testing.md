@@ -40,3 +40,24 @@ on Linux and not on Windows. Worth knowing rather than worth hiding.
 
 If someone wants to fix it properly, the thing to try is emitting the manifest
 for test targets from `build.rs` with `cargo:rustc-link-arg-tests`.
+
+## The interface
+
+`node --test ui-tests/logic.test.js ui-tests/shell.test.js`
+
+The interface follows the same rule as the Rust side. Everything it decides
+without touching the page - which unlock methods may be removed and why, what
+the editor sends to `save_entry`, how a two-factor box that was left blank is
+read, how a rollback confirmation is checked, what an import reports - lives in
+`ui/logic.js` as plain functions, and `app.js` only paints their answers.
+`logic.js` is a classic script that also exports itself to Node, so the same
+file runs in the window and under the test runner with nothing in between.
+
+`shell.test.js` reads the files instead of running them. It fails if the page
+loads any script but its own two, gains an inline script or handler, loosens
+the content security policy, calls the network or `eval`, calls a Rust command
+that is not registered, or looks up an element id the page does not have.
+
+No npm package is involved. What is still not tested: the DOM work in `app.js`
+itself. A browser harness would cover it, at the cost of a dependency this
+project has so far managed without.
