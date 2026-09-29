@@ -31,7 +31,7 @@ there is a user interface.
             |  obscura-webauthn  WebAuthn PRF for phone passkeys
             v
           ui/
-   three static files, no npm, default-src 'none'
+   four static files, no npm, default-src 'none'
 ```
 
 `obscura-platform` and `obscura-webauthn` are only reached from the desktop
@@ -218,7 +218,8 @@ src-tauri/
   clipboard.rs           copies that clear themselves
   dto.rs                 what crosses into the interface - never a raw Entry
 
-ui/                      index.html  styles.css  app.js
+ui/                      index.html  styles.css  app.js  logic.js
+ui-tests/                the interface's tests, run with node --test
 docs/                    this file, passkeys, testing, mutation testing
 packaging/windows/       MSIX manifest and build script
 ```

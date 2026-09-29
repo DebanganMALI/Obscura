@@ -20,9 +20,8 @@ what they claim to be.
 No account. No telemetry. No network code at all — not a disabled feature, but
 an application with no HTTP client in it.
 
-> **Status: early releases, 0.1.x.** Obscura has not been independently audited
-> and the interface has no automated test coverage yet. Keep a second copy of
-> anything you cannot afford to lose. What is being built next is listed under
+> **Status: early releases, 0.1.x.** Obscura has not been independently audited.
+> Keep a second copy of anything you cannot afford to lose. What is being built next is listed under
 > [Roadmap](#roadmap).
 
 ## Screenshots
@@ -281,7 +280,7 @@ API does not exist, so the workspace builds on every target.
 | Phone passkeys | Windows with WebAuthn API version 4 or newer, and a phone that supports passkeys |
 | Terminal browser | any terminal; colour is skipped when `NO_COLOR` is set or output is piped |
 
-The interface is three static files with no npm dependencies and a
+The interface is four static files with no npm dependencies and a
 `default-src 'none'` content security policy.
 
 ## Build from source
@@ -289,7 +288,11 @@ The interface is three static files with no npm dependencies and a
 ```sh
 cargo build --workspace
 cargo nextest run --workspace
+node --test ui-tests/logic.test.js ui-tests/shell.test.js
 ```
+
+The interface tests use only Node's built-in test runner, so there is nothing
+to install for them beyond Node itself.
 
 The desktop application needs the Tauri CLI:
 
@@ -309,12 +312,18 @@ cargo tauri build
 - `cargo deny` for licences and advisories, `gitleaks` for secrets, and
   Dependabot on the lockfile
 - Clippy at `pedantic`, with `unwrap_used` and `mem_forget` denied outright
+- **Interface tests** on Node's built-in runner, with no npm packages: the
+  interface's decisions - which unlock methods can be removed, what the editor
+  sends to Rust, how a rollback is confirmed - plus guards that the page loads
+  only its own scripts, the content security policy still denies by default,
+  the code has no way to reach the network, and every command and element it
+  names really exists
 
 What the suite does **not** cover, and why, is in
 [docs/testing.md](docs/testing.md) and
 [docs/mutation-testing.md](docs/mutation-testing.md). The short version: the
-interface has no automated tests at all, and every bug found by using the
-application this month was found by clicking, not by a test.
+interface's logic is tested, but how it paints the page is still checked by
+hand.
 
 ## Roadmap
 
@@ -324,7 +333,7 @@ Planned for 0.2.0, roughly in this order:
       strength meter computed in Rust
 - [x] Keep each vault's rollback watermark independent, so resetting one never
       weakens another
-- [ ] Automated tests for the interface, using Node's built-in test runner and
+- [x] Automated tests for the interface, using Node's built-in test runner and
       still no npm dependencies
 - [ ] Tests for the terminal browser against ratatui's test backend
 - [ ] Ship the `obscura` command line tool as a release download
