@@ -65,9 +65,11 @@ but neither was recorded anywhere:
   it. Current behaviour is pinned by test, not endorsed by it.
 - `obscura-cli` is a 144-byte stub at 0%. See `release-blockers.md`.
 - `brain.md` has been stale since `77aacf8`.
-- The interface has no tests at all. Three static files, no dependencies, and
-  the one defect found there was found by clicking. Worth deciding rather than
-  drifting into.
+- The interface had no tests at all. Decided: every decision the interface
+  makes without touching the page now lives in `ui/logic.js` and is tested with
+  `node --test`, still with no npm dependencies. The page wiring in `app.js` is
+  guarded by checks that every command and element it names exists, but is not
+  driven by a test.
 
 ## Traps worth re-reading before touching this code
 

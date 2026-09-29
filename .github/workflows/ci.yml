@@ -84,3 +84,15 @@ jobs:
           echo "a65b5253807a68ac0cafa4414031fd740aeb55f54fb7e55f386acb52e6a840eb  gitleaks.tar.gz" | sha256sum -c -
           tar -xzf gitleaks.tar.gz gitleaks
       - run: ./gitleaks git . --no-banner --redact --exit-code 1
+
+  interface:
+    name: interface (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v7
+      - run: node --version
+      - run: node --test ui-tests/logic.test.js ui-tests/shell.test.js

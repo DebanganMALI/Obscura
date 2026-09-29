@@ -124,7 +124,7 @@ proves which SBOM describes it.
 ## Supply chain
 
 - The application makes no network requests and contains no HTTP client
-- The interface is three static files with no npm dependencies, under a
+- The interface is four static files with no npm dependencies, under a
   `default-src 'none'` content security policy
 - `cargo deny` checks advisories, licences, duplicate crates and sources on
   every pull request; each ignored advisory is listed in `deny.toml` with the
@@ -136,7 +136,8 @@ proves which SBOM describes it.
 ## Known limitations
 
 - Obscura has not been independently audited.
-- The interface has no automated test coverage.
+- The interface's logic is tested, but the way it drives the page is checked
+  only by hand.
 - Secrets are zeroized when dropped, but their pages are not locked. A secret
   can reach swap or a crash dump before it is wiped.
 - The rollback watermark is a local file in the application config directory.
