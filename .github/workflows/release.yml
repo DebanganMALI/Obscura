@@ -101,7 +101,7 @@ jobs:
       - uses: actions/attest-build-provenance@v4
         with:
           subject-path: "dist/*"
-      - uses: actions/attest-sbom@v2
+      - uses: actions/attest-sbom@v4
         with:
           subject-path: |
             dist/*.msi
