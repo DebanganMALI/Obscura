@@ -3,6 +3,8 @@ const listen = window.__TAURI__.event.listen;
 
 const $ = (id) => document.getElementById(id);
 
+const L = ObscuraLogic;
+
 const state = {
   info: null,
   entries: [],
@@ -38,14 +40,10 @@ function toast(message, kind) {
 }
 
 function paintMeter(container, score) {
-  const band = score <= 1 ? "on-weak" : score <= 2 ? "on-fair" : "on-strong";
+  const band = L.meterBand(score);
   [...container.children].forEach((seg, i) => {
     seg.className = "meter__seg" + (i < score ? " " + band : "");
   });
-}
-
-function sentence(text) {
-  return text ? text.charAt(0).toUpperCase() + text.slice(1) + "." : "";
 }
 
 const meterTurns = new WeakMap();
@@ -66,19 +64,7 @@ async function measure(password, meter, note) {
   }
   if (meterTurns.get(meter) !== turn) return;
   paintMeter(meter, check.score);
-  note.textContent = sentence(check.problem);
-}
-
-function initials(title) {
-  const words = title.trim().split(/\s+/).filter(Boolean);
-  if (!words.length) return "?";
-  if (words.length === 1) return words[0].slice(0, 2);
-  return words[0][0] + words[1][0];
-}
-
-function errText(err) {
-  if (err && typeof err === "object" && typeof err.message === "string") return err.message;
-  return String(err);
+  note.textContent = L.sentence(check.problem);
 }
 
 function confirmRevision(detail) {
@@ -89,21 +75,7 @@ function confirmRevision(detail) {
     const accept = $("rb-accept");
     const cancel = $("rb-cancel");
     const expected = detail.confirm.expected;
-    const wording = {
-      rollback: [
-        "This vault looks older than it should",
-        "Obscura has seen a newer version of this vault on this computer.",
-      ],
-      unreadable: [
-        "The rollback record could not be read",
-        "Obscura cannot tell whether this file has been rolled back.",
-      ],
-      damaged: [
-        "The rollback record does not match",
-        "Obscura cannot tell whether this file has been rolled back.",
-      ],
-    };
-    const [title, lede] = wording[detail.confirm.reason] || wording.damaged;
+    const [title, lede] = L.revisionWording(detail.confirm.reason);
 
     $("rb-title").textContent = title;
     $("rb-lede").textContent = lede;
@@ -125,7 +97,7 @@ function confirmRevision(detail) {
       resolve(value);
     }
     function onAccept() {
-      if (typed.value.trim() !== String(detail.confirm.found)) {
+      if (!L.revisionConfirmed(typed.value, detail.confirm.found)) {
         error.textContent = "Type " + detail.confirm.found + " exactly to continue.";
         typed.select();
         return;
@@ -165,9 +137,9 @@ async function refreshGate() {
   }
 
   const probe = gateProbe;
-  gateMode = probe.exists && probe.isVault ? "unlock" : "create";
-  gateBlocked =
-    !probe.parentExists || (probe.exists && !probe.isVault) || (!probe.exists && !probe.writable);
+  const decided = L.gate(probe);
+  gateMode = decided.mode;
+  gateBlocked = decided.blocked;
 
   $("loc-path").textContent = probe.path;
   $("loc-default").hidden = probe.isDefault;
@@ -177,15 +149,8 @@ async function refreshGate() {
 
   const note = $("loc-note");
   note.className = "loc__note";
-  if (probe.warning) {
-    note.textContent = probe.warning;
-    note.classList.add(probe.parentExists && probe.writable ? "loc__note--warn" : "loc__note--bad");
-  } else if (gateMode === "unlock") {
-    note.textContent = "An Obscura vault is here.";
-    note.classList.add("loc__note--ok");
-  } else {
-    note.textContent = "Nothing here yet. A new vault will be created.";
-  }
+  note.textContent = decided.note.text;
+  if (decided.note.tone) note.classList.add("loc__note--" + decided.note.tone);
 
   applyGateMode();
   $("gate-error").textContent = "";
@@ -212,20 +177,11 @@ function applyGateMode() {
   $("gate-use-passkey").hidden = creating || !passkeyAvailable;
   if (creating) gateRecoveryMode = false;
 
-  $("gate-eyebrow").textContent = creating ? "First run" : "Vault locked";
-  $("gate-tagline").textContent = creating
-    ? "Choose where the vault lives, then a master password."
-    : "Everything you keep, kept to yourself.";
-  $("gate-label").textContent = creating
-    ? "New master password"
-    : gateRecoveryMode
-      ? "Recovery code"
-      : "Master password";
-  $("gate-submit").textContent = creating
-    ? "Create vault"
-    : gateRecoveryMode
-      ? "Unlock with code"
-      : "Unlock";
+  const words = L.gateWords(creating, gateRecoveryMode);
+  $("gate-eyebrow").textContent = words.eyebrow;
+  $("gate-tagline").textContent = words.tagline;
+  $("gate-label").textContent = words.label;
+  $("gate-submit").textContent = words.submit;
   $("gate-submit").disabled = false;
   if (!creating) $("gate-confirm").value = "";
 }
@@ -277,7 +233,7 @@ $("gate-use-hello").addEventListener("click", async () => {
     enterApp();
     if (!hasRecoverySlot()) await openRecovery(true);
   } catch (err) {
-    error.textContent = errText(err);
+    error.textContent = L.errText(err);
   } finally {
     button.disabled = false;
     button.textContent = "Unlock with Windows Hello";
@@ -315,7 +271,7 @@ $("gate-use-passkey").addEventListener("click", async () => {
     enterApp();
     if (!hasRecoverySlot()) await openRecovery(true);
   } catch (err) {
-    error.textContent = errText(err);
+    error.textContent = L.errText(err);
   } finally {
     button.disabled = false;
     button.textContent = "Unlock with a phone passkey";
@@ -377,7 +333,7 @@ $("gate-form").addEventListener("submit", async (event) => {
   if (gateMode === "create") {
     const check = await invoke("assess_password", { password }).catch(() => ({ problem: null }));
     if (check.problem) {
-      error.textContent = sentence(check.problem) + " Four or five unrelated words are easier to remember than a short, clever password.";
+      error.textContent = L.sentence(check.problem) + " Four or five unrelated words are easier to remember than a short, clever password.";
       return;
     }
     if (password !== $("gate-confirm").value) {
@@ -425,7 +381,7 @@ $("gate-form").addEventListener("submit", async (event) => {
     enterApp();
     if (creating || !hasRecoverySlot()) await openRecovery(true);
   } catch (err) {
-    error.textContent = errText(err);
+    error.textContent = L.errText(err);
     $("gate-password").select();
   } finally {
     submit.disabled = false;
@@ -454,8 +410,8 @@ function wipe() {
     scrim.hidden = true;
   });
 
-  $("detail").innerHTML = "";
-  $("list").innerHTML = "";
+  $("detail").replaceChildren();
+  $("list").replaceChildren();
   $("entry-count").textContent = "0 entries";
   $("search").value = "";
   $("gen-out").textContent = "\u00a0";
@@ -486,12 +442,11 @@ async function refresh() {
     state.entries = await invoke("list_entries", { query: $("search").value || null });
     state.info = await invoke("vault_info");
   } catch (err) {
-    if (String(err).includes("locked")) return leaveApp("Locked. Unlock to continue.");
+    if (L.isLocked(err)) return leaveApp("Locked. Unlock to continue.");
     toast(String(err), "warn");
     return;
   }
-  $("entry-count").textContent =
-    state.entries.length + (state.entries.length === 1 ? " entry" : " entries");
+  $("entry-count").textContent = L.entryCount(state.entries.length);
   renderList();
   renderDetail();
 }
@@ -514,7 +469,7 @@ function renderList() {
     row.type = "button";
     row.setAttribute("aria-selected", String(entry.id === state.selected));
 
-    row.append(h("span", "row__mark", initials(entry.title)));
+    row.append(h("span", "row__mark", L.initials(entry.title)));
 
     const middle = h("span", "row__body");
     middle.append(
@@ -561,7 +516,7 @@ async function renderDetail() {
   try {
     detail = await invoke("get_entry", { id: entry.id });
   } catch (err) {
-    if (String(err).includes("locked")) return leaveApp("Locked. Unlock to continue.");
+    if (L.isLocked(err)) return leaveApp("Locked. Unlock to continue.");
     pane.append(h("p", "error", String(err)));
     return;
   }
@@ -599,7 +554,7 @@ async function renderDetail() {
     ]));
   }
 
-  const dots = "\u2022".repeat(Math.min(detail.passwordLen, 28));
+  const dots = L.mask(detail.passwordLen);
   const passwordValue = h("span", "kv__v secret", dots);
 
   const reveal = h("button", "icon-btn");
@@ -632,14 +587,10 @@ async function renderDetail() {
   passwordRow.insertBefore(passwordValue, passwordRow.lastChild);
   card.append(passwordRow);
 
-  if (detail.passwordAgeDays !== null && detail.passwordAgeDays !== undefined) {
-    const days = detail.passwordAgeDays;
-    const stale = days > 365;
-    const label = days === 0 ? "Changed today"
-      : days === 1 ? "Changed yesterday"
-      : "Changed " + days + " days ago";
+  const age = L.passwordAge(detail.passwordAgeDays);
+  if (age) {
     const ageRow = kv("Age", null, []);
-    ageRow.insertBefore(h("span", "kv__v age" + (stale ? " age--stale" : ""), label),
+    ageRow.insertBefore(h("span", "kv__v age" + (age.stale ? " age--stale" : ""), age.label),
                         ageRow.lastChild);
     card.append(ageRow);
   }
@@ -668,7 +619,7 @@ async function renderDetail() {
     const tick = async () => {
       try {
         const current = await invoke("totp_code", { id: detail.id });
-        code.textContent = current.code.replace(/(\d{3})(?=\d)/g, "$1 ");
+        code.textContent = L.totpGroups(current.code);
         ring.set(current.remaining, current.period);
       } catch {
         clearInterval(state.totpTimer);
@@ -707,7 +658,7 @@ async function renderDetail() {
           : field.value;
         await invoke("copy_text", { text: value, clearAfter: 60 });
       }, "Copied - clipboard clears in a minute"));
-      card.append(kv(field.name, field.hidden ? "\u2022".repeat(10) : field.value, actions));
+      card.append(kv(field.name, field.hidden ? L.mask(10) : field.value, actions));
     }
     section.append(card);
     pane.append(section);
@@ -742,13 +693,13 @@ function revealButton(id, name) {
     if (!cell) return;
     try {
       if (shown) {
-        cell.textContent = "\u2022".repeat(10);
+        cell.textContent = L.mask(10);
       } else {
         cell.textContent = await invoke("reveal_field", { id, name });
       }
       shown = !shown;
     } catch (err) {
-      toast(errText(err), "warn");
+      toast(L.errText(err), "warn");
     }
   });
   return button;
@@ -802,7 +753,7 @@ function buildRing() {
     node,
     set(remaining, period) {
       label.textContent = String(remaining);
-      const fraction = Math.max(0, Math.min(1, remaining / period));
+      const fraction = L.ringFraction(remaining, period);
       bar.setAttribute("stroke-dashoffset", String(circumference * (1 - fraction)));
     },
   };
@@ -846,15 +797,16 @@ function addFieldRow(field) {
   $("e-fields").append(row);
 }
 
-function collectFields() {
-  return [...$("e-fields").querySelectorAll(".fieldrow")]
-    .map((row) => {
-      const [name, value] = row.querySelectorAll("input.input");
-      const hidden = row.querySelector('input[type="checkbox"]').checked;
-      const keep = value.dataset.kept === "1" && !value.value;
-      return { name: name.value.trim(), value: keep ? null : value.value, hidden };
-    })
-    .filter((field) => field.name);
+function fieldRows() {
+  return [...$("e-fields").querySelectorAll(".fieldrow")].map((row) => {
+    const [name, value] = row.querySelectorAll("input.input");
+    return {
+      name: name.value,
+      value: value.value,
+      hidden: row.querySelector('input[type="checkbox"]').checked,
+      kept: value.dataset.kept === "1",
+    };
+  });
 }
 
 function openEditor(detail) {
@@ -891,23 +843,20 @@ $("e-field-add").addEventListener("click", () => addFieldRow(null));
 
 $("editor-form").addEventListener("submit", async (event) => {
   event.preventDefault();
-  const password = $("e-password").value;
-  const totp = $("e-totp").value.trim();
-  const dropping = $("e-totp-drop").checked;
-
-  const input = {
+  const input = L.entryInput({
     id: state.editing,
     kind: $("e-kind").value,
-    title: $("e-title").value.trim(),
-    username: $("e-username").value.trim(),
-    password: password ? password : null,
-    urls: $("e-url").value.split("\n").map((u) => u.trim()).filter(Boolean),
+    title: $("e-title").value,
+    username: $("e-username").value,
+    password: $("e-password").value,
+    urls: $("e-url").value,
     notes: $("e-notes").value,
-    tags: $("e-tags").value.split(",").map((t) => t.trim()).filter(Boolean),
+    tags: $("e-tags").value,
     favorite: $("e-favorite").checked,
-    totpUri: totp ? totp : dropping ? "" : null,
-    customFields: collectFields(),
-  };
+    totp: $("e-totp").value,
+    dropping: $("e-totp-drop").checked,
+    fields: fieldRows(),
+  });
 
   try {
     const id = await invoke("save_entry", { input });
@@ -1014,26 +963,15 @@ async function openSettings() {
   $("settings-scrim").hidden = false;
 }
 
-const SLOT_KINDS = {
-  password: "master password",
-  recovery: "recovery code",
-  passkey: "passkey",
-  hardware: "this computer",
-};
-
 function renderSlots(slots) {
   const host = $("s-slots");
   host.replaceChildren();
-  const portable = slots.filter((s) => s.portable).length;
-
   for (const slot of slots) {
     const row = h("div", "slot");
 
     const body = h("span", "slot__body");
     body.append(h("span", "slot__label", slot.label));
-    const added = slot.createdAt ? slot.createdAt.slice(0, 10) : "";
-    const kindText = SLOT_KINDS[slot.kind] || slot.kind;
-    body.append(h("span", "slot__meta", kindText + (added ? "  -  added " + added : "")));
+    body.append(h("span", "slot__meta", L.slotMeta(slot)));
     row.append(body);
 
     row.append(
@@ -1043,20 +981,13 @@ function renderSlots(slots) {
 
     const remove = h("button", "icon-btn");
     remove.append(icon("i-trash"));
-    const permanent = slot.kind === "password";
-    const lastPortable = slot.portable && portable <= 1;
-    const onlySlot = slots.length <= 1;
-    if (permanent || lastPortable || onlySlot) {
-      remove.disabled = true;
-      remove.title = permanent
-        ? "The master password can be changed below, but never removed."
-        : onlySlot
-          ? "This is the only way into the vault."
-          : "The last portable credential. Add a recovery code first, then this can go.";
-      remove.classList.add("icon-btn--off");
-    } else {
-      remove.title = "Remove " + slot.label;
+    const removal = L.slotRemoval(slot, slots);
+    remove.title = removal.reason;
+    if (removal.allowed) {
       remove.addEventListener("click", () => removeSlot(slot, remove));
+    } else {
+      remove.disabled = true;
+      remove.classList.add("icon-btn--off");
     }
     row.append(remove);
     host.append(row);
@@ -1081,14 +1012,9 @@ async function removeSlot(slot, button) {
     return;
   }
   try {
-    const command = slot.kind === "hardware" ? "hello_forget" : "remove_slot";
-    state.info = await invoke(command, { id: slot.id });
+    state.info = await invoke(L.slotCommand(slot), { id: slot.id });
     renderSlots(state.info.slots);
-    toast(
-      slot.kind === "passkey"
-        ? slot.label + " removed. The credential is still on the phone until you delete it there."
-        : slot.label + " removed"
-    );
+    toast(L.slotRemoved(slot));
   } catch (err) {
     error.textContent = String(err);
   }
@@ -1149,7 +1075,7 @@ $("ex-go").addEventListener("click", async () => {
     $("ex-scrim").hidden = true;
     toast(result.entries + " entries written to " + result.path, "warn");
   } catch (err) {
-    error.textContent = errText(err);
+    error.textContent = L.errText(err);
   } finally {
     button.disabled = false;
   }
@@ -1165,24 +1091,10 @@ $("s-import").addEventListener("click", async () => {
     if (!result) return;
     state.info = result.info;
     $("s-count").textContent = String(result.info.entryCount);
-    const many = (n, one, more) => n + " " + (n === 1 ? one : more);
-    const asides = [];
-    if (result.renumbered) {
-      asides.push(many(result.renumbered, "was given a new id", "were given a new id"));
-    }
-    if (result.skipped) {
-      asides.push(many(result.skipped, "row was skipped", "rows were skipped"));
-    }
-    if (result.totpDropped) {
-      asides.push(many(result.totpDropped,
-        "two-factor secret could not be read", "two-factor secrets could not be read"));
-    }
-    const tail = asides.length ? " - " + asides.join(", ") : "";
-    toast("Added " + many(result.added, "entry", "entries") + " from " + result.source + tail,
-      result.totpDropped || result.skipped ? "warn" : undefined);
+    toast(L.importMessage(result), L.importWarns(result) ? "warn" : undefined);
     await refresh();
   } catch (err) {
-    error.textContent = errText(err);
+    error.textContent = L.errText(err);
   } finally {
     button.disabled = false;
   }
@@ -1309,7 +1221,7 @@ function showCode(code) {
   const host = $("rc-code");
   host.replaceChildren();
   host.dataset.code = code;
-  for (const group of code.split("-").filter(Boolean)) {
+  for (const group of L.codeGroups(code)) {
     host.append(h("span", "rc__group", group));
   }
 }
@@ -1406,12 +1318,13 @@ document.addEventListener("keydown", (event) => {
     if (open && open.dataset.locked !== "true") { open.hidden = true; return; }
     if (open) return;
   }
-  if (!event.ctrlKey && !event.metaKey) return;
-  const key = event.key.toLowerCase();
-  if (key === "l") { event.preventDefault(); $("btn-lock").click(); }
-  if (key === "n" && !$("app").hidden) { event.preventDefault(); openEditor(null); }
-  if (key === "g" && !$("app").hidden) { event.preventDefault(); $("btn-generator").click(); }
-  if (key === "f" && !$("app").hidden) { event.preventDefault(); $("search").focus(); }
+  const action = L.shortcut(event, !$("app").hidden);
+  if (!action) return;
+  event.preventDefault();
+  if (action === "lock") $("btn-lock").click();
+  if (action === "new") openEditor(null);
+  if (action === "generator") $("btn-generator").click();
+  if (action === "search") $("search").focus();
 });
 
 let lastTouch = 0;
