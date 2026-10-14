@@ -685,7 +685,7 @@ mod tests {
             !press(&mut app, KeyCode::Char('q')),
             "q while filtering is a letter, not quit"
         );
-        assert!(app.shown.is_empty());
+        assert_eq!(app.shown.len(), 0);
         assert!(screen(&mut app).contains("Nothing matches that."));
 
         press(&mut app, KeyCode::Backspace);
@@ -693,7 +693,7 @@ mod tests {
 
         press(&mut app, KeyCode::Esc);
         assert_eq!(app.mode, Mode::Browse);
-        assert!(app.filter.is_empty());
+        assert_eq!(app.filter, "");
         assert_eq!(app.shown.len(), 3);
     }
 

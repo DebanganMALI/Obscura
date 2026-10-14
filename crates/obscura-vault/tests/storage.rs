@@ -62,7 +62,7 @@ fn an_empty_vault_round_trips() {
     let mut vault = Vault::create(PASSWORD, FAST).unwrap();
     let bytes = vault.to_bytes().unwrap();
     let reopened = Vault::from_bytes(&bytes, &Credential::Password(PASSWORD), None).unwrap();
-    assert!(reopened.is_empty());
+    assert_eq!((reopened.len(), reopened.is_empty()), (0, true));
 }
 
 #[test]
@@ -847,7 +847,7 @@ fn a_header_edit_that_still_parses_is_caught_by_the_body_tag() {
 #[test]
 fn a_vault_that_holds_entries_says_so_and_never_shows_its_key() {
     let vault = seeded_vault();
-    assert!(!vault.is_empty());
+    assert_eq!((vault.len(), vault.is_empty()), (2, false));
 
     let shown = format!("{vault:?}");
     assert!(shown.contains("Vault"));

@@ -84,9 +84,9 @@ mod tests {
 
     #[test]
     fn a_secret_reports_the_size_it_was_given() {
-        assert_eq!(SecretBytes::<32>::zeroed().len(), 32);
-        assert!(!SecretBytes::<32>::zeroed().is_empty());
-        assert_eq!(SecretBytes::<0>::zeroed().len(), 0);
-        assert!(SecretBytes::<0>::zeroed().is_empty());
+        let full = SecretBytes::<32>::zeroed();
+        let none = SecretBytes::<0>::zeroed();
+        assert_eq!((full.len(), full.is_empty()), (32, false));
+        assert_eq!((none.len(), none.is_empty()), (0, true));
     }
 }
