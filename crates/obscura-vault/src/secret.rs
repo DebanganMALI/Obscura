@@ -70,12 +70,10 @@ mod tests {
     fn a_secret_string_reports_the_text_it_was_given() {
         let secret = SecretString::from(String::from("hunter2"));
         assert_eq!(secret.expose(), "hunter2");
-        assert_eq!(secret.len(), 7);
-        assert!(!secret.is_empty());
+        assert_eq!((secret.len(), secret.is_empty()), (7, false));
 
         let empty = SecretString::from(String::new());
         assert_eq!(empty.expose(), "");
-        assert_eq!(empty.len(), 0);
-        assert!(empty.is_empty());
+        assert_eq!((empty.len(), empty.is_empty()), (0, true));
     }
 }
