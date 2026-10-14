@@ -58,6 +58,22 @@ fn a_vault_round_trips_through_bytes() {
 }
 
 #[test]
+fn an_open_vault_keeps_its_key_and_passwords_in_locked_memory() {
+    obscura_memlock::harden();
+    let mut vault = seeded_vault();
+    assert!(vault.key_locked());
+
+    let bytes = vault.to_bytes().unwrap();
+    let reopened = Vault::from_bytes(&bytes, &Credential::Password(PASSWORD), None).unwrap();
+
+    assert!(reopened.key_locked());
+    assert!(reopened
+        .entries()
+        .iter()
+        .all(|entry| entry.password.is_locked()));
+}
+
+#[test]
 fn an_empty_vault_round_trips() {
     let mut vault = Vault::create(PASSWORD, FAST).unwrap();
     let bytes = vault.to_bytes().unwrap();

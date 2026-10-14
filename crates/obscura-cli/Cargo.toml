@@ -17,6 +17,7 @@ path = "src/main.rs"
 workspace = true
 
 [dependencies]
+obscura-memlock = { workspace = true }
 obscura-vault  = { workspace = true }
 anyhow         = { workspace = true }
 zeroize        = { workspace = true }
