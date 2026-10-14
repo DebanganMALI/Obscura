@@ -417,6 +417,8 @@ function wipe() {
   $("gen-out").textContent = "\u00a0";
   $("gen-bits").textContent = "0";
   $("rc-code").textContent = "\u00a0";
+  $("health-body").replaceChildren();
+  $("health-summary").textContent = "";
 
   document.querySelectorAll("#app input, #app textarea, .scrim input, .scrim textarea")
     .forEach((field) => {
@@ -1290,6 +1292,47 @@ function openRecoveryUnlock() {
 
 $("btn-new").addEventListener("click", () => openEditor(null));
 $("btn-generator").addEventListener("click", () => { $("gen-scrim").hidden = false; generate(); });
+
+async function openHealth() {
+  let report;
+  try {
+    report = await invoke("password_health");
+  } catch (err) {
+    if (L.isLocked(err)) return leaveApp("Locked. Unlock to continue.");
+    toast(String(err), "warn");
+    return;
+  }
+  $("health-summary").textContent = L.healthSummary(report);
+  const body = $("health-body");
+  body.replaceChildren();
+  for (const section of L.healthSections(report)) {
+    const block = h("section", "section");
+    block.append(h("p", "section__label", section.title + " (" + section.items.length + ")"));
+    const card = h("div", "card");
+    for (const item of section.items) {
+      const row = h("button", "row");
+      row.type = "button";
+      row.append(h("span", "row__mark", L.initials(item.title)));
+      const middle = h("span", "row__body");
+      middle.append(h("span", "row__title", item.title), h("span", "row__sub", item.sub));
+      row.append(middle);
+      row.addEventListener("click", async () => {
+        $("health-scrim").hidden = true;
+        if ($("search").value) {
+          $("search").value = "";
+          await refresh();
+        }
+        select(item.id);
+      });
+      card.append(row);
+    }
+    block.append(card);
+    body.append(block);
+  }
+  $("health-scrim").hidden = false;
+}
+
+$("btn-health").addEventListener("click", openHealth);
 $("btn-settings").addEventListener("click", openSettings);
 $("btn-lock").addEventListener("click", async () => {
   await invoke("lock");

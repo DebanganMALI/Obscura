@@ -20,8 +20,8 @@ use crate::{
     clipboard,
     dto::{
         CustomFieldView, EntryDetail, EntryInput, EntrySummary, ExportResult, GeneratedPassword,
-        ImportResult, IssuedRecoveryCode, LocationProbe, PasswordCheck, RelocateResult, SlotView,
-        TotpCode, UnlockError, VaultInfo,
+        HealthItem, HealthReport, ImportResult, IssuedRecoveryCode, LocationProbe, PasswordCheck,
+        RelocateResult, SlotView, TotpCode, UnlockError, VaultInfo,
     },
     location,
     state::{AppState, Session},
@@ -368,6 +368,62 @@ pub fn list_entries(
 ) -> Result<Vec<EntrySummary>, String> {
     let needle = query.unwrap_or_default();
     state.with_session(|session| Ok(summaries(session, &needle)))
+}
+
+#[tauri::command]
+pub fn password_health(state: State<'_, AppState>) -> Result<HealthReport, String> {
+    state.with_session(|session| Ok(health_of(session)))
+}
+
+fn health_of(session: &Session) -> HealthReport {
+    let report = obscura_vault::health::examine(session.vault.entries());
+    let item = |id: Uuid, note: String| {
+        session.vault.get(id).map(|entry| HealthItem {
+            id,
+            title: entry.title.clone(),
+            username: entry.username.clone(),
+            note,
+        })
+    };
+    HealthReport {
+        checked: report.checked,
+        reused: report
+            .reused
+            .iter()
+            .map(|ids| {
+                let shared = match ids.len() {
+                    2 => "the same password as one other entry".to_owned(),
+                    n => format!("the same password as {} other entries", n - 1),
+                };
+                ids.iter()
+                    .filter_map(|id| item(*id, shared.clone()))
+                    .collect()
+            })
+            .collect(),
+        weak: report
+            .weak
+            .iter()
+            .filter_map(|(id, weakness)| item(*id, weakness_note(*weakness)))
+            .collect(),
+        stale: report
+            .stale
+            .iter()
+            .filter_map(|(id, days)| item(*id, format!("unchanged for {days} days")))
+            .collect(),
+    }
+}
+
+fn weakness_note(weakness: obscura_vault::Weakness) -> String {
+    match weakness {
+        obscura_vault::Weakness::TooShort => format!(
+            "shorter than {} characters",
+            obscura_vault::policy::MIN_ENTRY_CHARS
+        ),
+        obscura_vault::Weakness::Common => "on a list of commonly used passwords".to_owned(),
+        obscura_vault::Weakness::Repetitive => "repeats itself".to_owned(),
+        obscura_vault::Weakness::Sequential => "a run of neighbouring keys or letters".to_owned(),
+        obscura_vault::Weakness::AppName => "built around the name of this app".to_owned(),
+    }
 }
 
 fn detail(session: &Session, id: Uuid) -> Result<EntryDetail, String> {
@@ -1907,6 +1963,79 @@ mod admission_rules {
             ),
             "an unreadable record is replaced only on agreement"
         );
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::indexing_slicing)]
+mod health {
+    use super::*;
+
+    const FAST: KdfParams = KdfParams {
+        m_cost_kib: 64 * 1024,
+        t_cost: 2,
+        p_cost: 1,
+    };
+
+    const SHARED: &str = "lantern-mango-quiet-orbit";
+
+    fn a_session() -> Session {
+        let mut vault = Vault::create(b"correct horse battery staple", FAST).unwrap();
+        for (title, password) in [
+            ("Mail", SHARED),
+            ("Bank", SHARED),
+            ("Forum", "abc123x"),
+            ("Shop", "tamarind-velvet-harbour-9"),
+        ] {
+            let mut entry = Entry::new_login(title, "saheb");
+            entry.set_password(password);
+            vault.add(entry).unwrap();
+        }
+        vault.add(Entry::new_login("A note", "")).unwrap();
+        Session::new(vault, PathBuf::from("vault.obscura"))
+    }
+
+    #[test]
+    fn the_report_names_the_entries_and_says_what_is_wrong() {
+        let report = health_of(&a_session());
+
+        assert_eq!(report.checked, 4);
+        assert_eq!(report.reused.len(), 1);
+        let titles: Vec<&str> = report.reused[0].iter().map(|i| i.title.as_str()).collect();
+        assert_eq!(titles, ["Bank", "Mail"]);
+        assert_eq!(
+            report.reused[0][0].note,
+            "the same password as one other entry"
+        );
+
+        assert_eq!(report.weak.len(), 1);
+        assert_eq!(report.weak[0].title, "Forum");
+        assert!(report.weak[0].note.contains("shorter than 10"));
+        assert_eq!(report.stale.len(), 0);
+    }
+
+    #[test]
+    fn the_report_never_carries_a_password() {
+        let json = serde_json::to_string(&health_of(&a_session())).unwrap();
+        for secret in [SHARED, "abc123x", "tamarind-velvet-harbour-9"] {
+            assert!(!json.contains(secret), "{json}");
+        }
+    }
+
+    #[test]
+    fn every_weakness_has_its_own_note() {
+        use obscura_vault::Weakness;
+        let notes: std::collections::HashSet<String> = [
+            Weakness::TooShort,
+            Weakness::Common,
+            Weakness::Repetitive,
+            Weakness::Sequential,
+            Weakness::AppName,
+        ]
+        .into_iter()
+        .map(weakness_note)
+        .collect();
+        assert_eq!(notes.len(), 5);
     }
 }
 
