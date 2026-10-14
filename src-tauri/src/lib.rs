@@ -17,6 +17,7 @@ pub const LOCKED_EVENT: &str = "obscura://locked";
 
 #[allow(clippy::expect_used)]
 pub fn run() {
+    obscura_memlock::harden();
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .manage(AppState::default())

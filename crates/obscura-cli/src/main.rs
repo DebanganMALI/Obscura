@@ -19,6 +19,7 @@ use args::{Command, USAGE};
 const IDLE: Duration = Duration::from_secs(300);
 
 fn main() -> ExitCode {
+    obscura_memlock::harden();
     match run() {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {

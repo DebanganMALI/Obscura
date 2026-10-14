@@ -10,4 +10,4 @@ pub mod secret;
 
 pub use error::CryptoError;
 pub use kdf::KdfParams;
-pub use secret::{SecretBytes, SecretKey, KEY_LEN};
+pub use secret::{LockedBytes, LockedKey, SecretBytes, SecretKey, KEY_LEN};
