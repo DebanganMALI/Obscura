@@ -69,6 +69,9 @@ The same vault from a terminal. `obscura` on its own opens a browsable view;
   silently accepted
 - **Password health** — reused, weak and year-old passwords, worked out in Rust
   on your machine. The report names entries and reasons, never a password
+- **Secrets kept out of swap** — the vault key and every password, note, field
+  and two-factor secret sit in pages locked with `VirtualLock` or `mlock`, and
+  crash dumps leave them out
 - **TOTP codes**, a password generator, CSV import from other managers, and
   encrypted export
 - **Auto-lock on idle**, timed against both a monotonic and a wall clock, so a
@@ -263,7 +266,7 @@ key hierarchy, the unlock and save sequences, and an annotated file tree.
 
 ## Architecture
 
-Five library crates and two front ends. The cryptography does not know what a
+Six library crates and two front ends. The cryptography does not know what a
 vault is, the vault does not know what an operating system is, and neither knows
 there is a user interface.
 
@@ -282,6 +285,7 @@ watermark, clipboard         banner, colour, ratatui
         |
 obscura-platform   Windows Hello, file permissions
 obscura-webauthn   WebAuthn PRF for phone passkeys
+obscura-memlock    locked pages, no secrets in crash dumps
 ```
 
 `obscura-platform` and `obscura-webauthn` compile to stubs where the underlying
@@ -356,7 +360,7 @@ Planned for 0.2.0, roughly in this order:
 - [x] Ship the `obscura` command line tool as a release download
 - [x] Run the application-level tests on Windows as well as Linux
 - [x] A password health view: reused, weak and old passwords, computed locally
-- [ ] Lock secret memory pages with `VirtualLock` and `mlock`, so keys cannot be
+- [x] Lock secret memory pages with `VirtualLock` and `mlock`, so keys cannot be
       written to swap
 - [ ] A written threat model, and a security posture document mapped to the
       ISO/IEC 27001:2022 Annex A controls that apply to a single application
