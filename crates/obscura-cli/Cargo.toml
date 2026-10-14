@@ -23,3 +23,6 @@ zeroize        = { workspace = true }
 arboard        = { workspace = true }
 rpassword      = { workspace = true }
 ratatui        = "0.30"
+
+[dev-dependencies]
+obscura-crypto = { workspace = true }

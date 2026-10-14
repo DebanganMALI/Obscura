@@ -335,7 +335,7 @@ Planned for 0.2.0, roughly in this order:
       weakens another
 - [x] Automated tests for the interface, using Node's built-in test runner and
       still no npm dependencies
-- [ ] Tests for the terminal browser against ratatui's test backend
+- [x] Tests for the terminal browser against ratatui's test backend
 - [ ] Ship the `obscura` command line tool as a release download
 - [ ] Run the application-level tests on Windows as well as Linux
 - [ ] A password health view: reused, weak and old passwords, computed locally
