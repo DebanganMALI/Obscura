@@ -22,9 +22,11 @@ application itself.
 
 Everything Obscura keeps lives on your own computer.
 
-**Your vault** is a single encrypted file at a location you choose. Entry
-titles, usernames, passwords, notes, custom fields and two-factor secrets are
-inside it, encrypted. Obscura never writes them anywhere else.
+**Your vault** is a single encrypted file at a location you choose. Unless you
+pick somewhere else, a new vault is created in an `Obscura` folder inside your
+Documents folder. Entry titles, usernames, passwords, notes, custom fields and
+two-factor secrets are inside it, encrypted. Obscura never writes them anywhere
+else.
 
 **A settings file** in your user configuration directory remembers where your
 vault is and how long before it locks itself. It contains no secrets.
@@ -35,7 +37,9 @@ an older copy of your vault is put back in place. It contains no secrets and no
 entry data.
 
 Uninstalling removes the application. Your vault file is yours and stays where
-you put it.
+you put it. That includes the Microsoft Store version: Windows deletes a Store
+app's private folders when it is uninstalled, which is why Obscura never places
+a new vault in one.
 
 ## How your data is protected
 
