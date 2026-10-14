@@ -35,6 +35,19 @@ jobs:
       - name: Install the Tauri CLI
         run: cargo install tauri-cli --version "^2" --locked
       - run: cargo tauri build
+      - run: cargo build --release --locked -p obscura-cli
+      - name: Package the command line tool
+        shell: bash
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          mkdir -p cli
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            cp target/release/obscura.exe cli/
+            (cd cli && 7z a -tzip "../obscura-cli_${version}_x64-windows.zip" obscura.exe)
+          else
+            cp target/release/obscura cli/
+            tar -C cli -czf "obscura-cli_${version}_amd64-linux.tar.gz" obscura
+          fi
       - uses: actions/upload-artifact@v7
         with:
           name: bundle-${{ matrix.os }}
@@ -44,6 +57,8 @@ jobs:
             target/release/bundle/deb/*.deb
             target/release/bundle/rpm/*.rpm
             target/release/bundle/appimage/*.AppImage
+            obscura-cli_*.zip
+            obscura-cli_*.tar.gz
           if-no-files-found: error
 
   sbom:
@@ -58,20 +73,24 @@ jobs:
         run: |
           export SOURCE_DATE_EPOCH="$(git log -1 --format=%ct)"
           cargo cyclonedx --manifest-path src-tauri/Cargo.toml --format json --spec-version 1.5 --target all -q
+          cargo cyclonedx --manifest-path crates/obscura-cli/Cargo.toml --format json --spec-version 1.5 --target all -q
           mkdir -p sbom
           cp src-tauri/obscura-app.cdx.json "sbom/Obscura_${GITHUB_REF_NAME}.cdx.json"
-      - name: Give the SBOM a stable serial number
+          cp crates/obscura-cli/obscura-cli.cdx.json "sbom/obscura-cli_${GITHUB_REF_NAME}.cdx.json"
+      - name: Give each SBOM a stable serial number
         shell: python
         run: |
           import json, os, uuid
-          path = f"sbom/Obscura_{os.environ['GITHUB_REF_NAME']}.cdx.json"
-          with open(path, encoding="utf-8") as f:
-              bom = json.load(f)
-          release = f"https://github.com/{os.environ['GITHUB_REPOSITORY']}/releases/tag/{os.environ['GITHUB_REF_NAME']}"
-          bom["serialNumber"] = uuid.uuid5(uuid.NAMESPACE_URL, release).urn
-          with open(path, "w", encoding="utf-8") as f:
-              json.dump(bom, f, indent=2)
-              f.write("\n")
+          tag = os.environ["GITHUB_REF_NAME"]
+          release = f"https://github.com/{os.environ['GITHUB_REPOSITORY']}/releases/tag/{tag}"
+          for name, anchor in (("Obscura", ""), ("obscura-cli", "#obscura-cli")):
+              path = f"sbom/{name}_{tag}.cdx.json"
+              with open(path, encoding="utf-8") as f:
+                  bom = json.load(f)
+              bom["serialNumber"] = uuid.uuid5(uuid.NAMESPACE_URL, release + anchor).urn
+              with open(path, "w", encoding="utf-8") as f:
+                  json.dump(bom, f, indent=2)
+                  f.write("\n")
       - uses: actions/upload-artifact@v7
         with:
           name: sbom
@@ -110,6 +129,12 @@ jobs:
             dist/*.rpm
             dist/*.AppImage
           sbom-path: dist/Obscura_${{ github.ref_name }}.cdx.json
+      - uses: actions/attest-sbom@v4
+        with:
+          subject-path: |
+            dist/obscura-cli_*.zip
+            dist/obscura-cli_*.tar.gz
+          sbom-path: dist/obscura-cli_${{ github.ref_name }}.cdx.json
       - uses: softprops/action-gh-release@v3
         with:
           draft: true
