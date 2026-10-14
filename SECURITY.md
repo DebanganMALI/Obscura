@@ -119,7 +119,8 @@ gh attestation verify Obscura_0.1.1_x64-setup.exe --repo DebanganMALI/Obscura \
 ```
 
 The first proves which commit and workflow run built the installer. The second
-proves which SBOM describes it.
+proves which SBOM describes it. The command line tool's archive is verified the
+same way and has its own SBOM, `obscura-cli_<tag>.cdx.json`.
 
 ## Supply chain
 
