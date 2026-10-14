@@ -13,33 +13,28 @@ That pattern is not only cheaper than a harness. Every defect found in this
 project so far has been in a sequence, and every one of them was reachable
 once the sequence was a function taking values instead of a handle.
 
-## The mock-runtime tests do not run on Windows
+## The mock-runtime tests run on Windows too
 
 `commands::wiring` drives thirteen commands end-to-end on Tauri's
 `MockRuntime`, covering create, unlock, save, relocate, the rollback refusal and
-the auto-lock round trip. It is compiled and run on Linux only.
+the auto-lock round trip. It runs on Linux and Windows.
 
-On Windows the library test binary aborts before `main` with
-`0xc0000139`, `STATUS_ENTRYPOINT_NOT_FOUND`. All of its imports are system
-libraries, so one of them resolves to a copy that lacks an export it wants. The
-most likely candidate is `comctl32.dll`: tao imports functions that exist only
-in version 6, and an executable gets version 6 only by carrying a manifest that
-asks for it. `tauri-build` emits that manifest for binary targets, not for test
-targets, which is why `obscura-app.exe` runs and the test binary does not, and
-why this appeared exactly when enabling the `test` feature changed which tao
-code was linked in.
+For a while it ran on Linux only. On Windows the library test binary aborted
+before `main` with `0xc0000139`, `STATUS_ENTRYPOINT_NOT_FOUND`: the dialog code
+imports functions that exist only in version 6 of `comctl32.dll`, and a Windows
+program gets version 6 only if its manifest asks for it. `tauri-build` puts that
+manifest into a resource linked into binaries alone, so `obscura-app.exe`
+started and the test binary did not. `cargo:rustc-link-arg-tests` would not
+have helped, because it reaches only the targets under `tests/`, not the unit
+test harness built from the library.
 
-It was not confirmed. An external manifest could not be used to test the theory
-because rustc embeds its own, and Windows then ignores the external one.
-
-So the dev-dependency is declared for non-Windows targets only and the module is
-gated to match. A Windows test build is therefore identical to what it was
-before any of this, and `cargo nextest run --workspace` passes on both
-platforms. What it costs: a regression in the command sequences would be caught
-on Linux and not on Windows. Worth knowing rather than worth hiding.
-
-If someone wants to fix it properly, the thing to try is emitting the manifest
-for test targets from `build.rs` with `cargo:rustc-link-arg-tests`.
+`src-tauri/build.rs` now turns off `tauri-build`'s manifest and has the MSVC
+linker write one instead, through `/MANIFEST:EMBED` and a
+`/MANIFESTDEPENDENCY` on Common Controls 6. Those flags apply to every artifact
+the package links - the application, the library and its test harness alike -
+so all of them ask for the same version of the same library. Two embedded
+manifests would collide, which is why the resource copy has to go rather than
+sit beside it.
 
 ## The interface
 
