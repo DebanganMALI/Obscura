@@ -284,9 +284,9 @@ mod tests {
 
         wipe_plain_fields(&mut entry);
 
-        assert!(entry.title.is_empty());
-        assert!(entry.username.is_empty());
-        assert!(entry.urls.is_empty());
-        assert!(entry.tags.is_empty());
+        assert_eq!(entry.title, "");
+        assert_eq!(entry.username, "");
+        assert_eq!(entry.urls, Vec::<String>::new());
+        assert_eq!(entry.tags, Vec::<String>::new());
     }
 }

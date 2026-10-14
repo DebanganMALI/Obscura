@@ -91,7 +91,7 @@ mod tests {
         assert_eq!(sealed.len(), OVERHEAD);
 
         let opened = open(&key, b"tag", &sealed).expect("opening a sealed empty message");
-        assert!(opened.is_empty());
+        assert_eq!(opened.len(), 0);
 
         assert!(open(&key, b"tag", &sealed[..OVERHEAD - 1]).is_err());
     }

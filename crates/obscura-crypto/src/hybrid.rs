@@ -296,7 +296,7 @@ mod redaction {
         let public = identity.public_key().unwrap();
         let ciphertext = HybridCiphertext::from_bytes(&[0u8; CIPHERTEXT_LEN]).unwrap();
 
-        assert!(!format!("{public:?}").is_empty());
-        assert!(!format!("{ciphertext:?}").is_empty());
+        assert_ne!(format!("{public:?}"), "");
+        assert_ne!(format!("{ciphertext:?}"), "");
     }
 }
