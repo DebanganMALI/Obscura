@@ -68,13 +68,28 @@ fn hello_failure(error: &obscura_platform::PlatformError) -> UnlockError {
         other => UnlockError::message(other.to_string()),
     }
 }
+const VAULT_FILE: &str = "obscura.obscura";
+
 fn default_vault_path<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> Result<PathBuf, String> {
-    let dir = app
+    let data = app
         .path()
         .app_data_dir()
         .map_err(|e| format!("cannot locate the application data directory: {e}"))?;
-    std::fs::create_dir_all(&dir).map_err(|e| format!("cannot create {}: {e}", dir.display()))?;
-    Ok(dir.join("obscura.obscura"))
+    let documents = app.path().document_dir().ok();
+    let path = default_vault_in(&data, documents.as_deref());
+    if let Some(dir) = path.parent() {
+        std::fs::create_dir_all(dir)
+            .map_err(|e| format!("cannot create {}: {e}", dir.display()))?;
+    }
+    Ok(path)
+}
+
+fn default_vault_in(data: &std::path::Path, documents: Option<&std::path::Path>) -> PathBuf {
+    let earlier = data.join(VAULT_FILE);
+    if earlier.is_file() {
+        return earlier;
+    }
+    documents.map_or(earlier, |dir| dir.join("Obscura").join(VAULT_FILE))
 }
 
 fn resolve<R: tauri::Runtime>(
@@ -1899,6 +1914,49 @@ mod admission_rules {
 #[allow(clippy::unwrap_used)]
 mod new_vault_location {
     use super::*;
+
+    fn scratch(name: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("obscura-{name}-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    #[test]
+    fn a_new_vault_goes_to_documents_where_uninstalling_cannot_reach_it() {
+        let data = scratch("data");
+        let documents = scratch("documents");
+
+        assert_eq!(
+            default_vault_in(&data, Some(documents.as_path())),
+            documents.join("Obscura").join(VAULT_FILE)
+        );
+
+        std::fs::remove_dir_all(&data).unwrap();
+        std::fs::remove_dir_all(&documents).unwrap();
+    }
+
+    #[test]
+    fn a_vault_already_at_the_old_default_stays_where_it_is() {
+        let data = scratch("data");
+        let documents = scratch("documents");
+        std::fs::write(data.join(VAULT_FILE), b"an existing vault").unwrap();
+
+        assert_eq!(
+            default_vault_in(&data, Some(documents.as_path())),
+            data.join(VAULT_FILE),
+            "moving the default must never strand a vault someone already has"
+        );
+
+        std::fs::remove_dir_all(&data).unwrap();
+        std::fs::remove_dir_all(&documents).unwrap();
+    }
+
+    #[test]
+    fn without_a_documents_folder_the_application_data_folder_is_used() {
+        let data = scratch("data");
+        assert_eq!(default_vault_in(&data, None), data.join(VAULT_FILE));
+        std::fs::remove_dir_all(&data).unwrap();
+    }
 
     #[test]
     fn a_new_vault_needs_a_free_name_inside_a_folder_that_is_there() {
