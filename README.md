@@ -160,7 +160,8 @@ gh attestation verify Obscura_0.1.1_x64-setup.exe --repo DebanganMALI/Obscura \
 ### The application
 
 Open it, choose where the vault lives, set a master password. That is the whole
-setup — there is nothing to sign up for.
+setup — there is nothing to sign up for. Unless you choose otherwise, the vault
+goes in `Documents\Obscura`, a folder that uninstalling never touches.
 
 Add a recovery code before you add anything you care about. It is the only
 unlock method that survives losing both your memory and your machine, and
