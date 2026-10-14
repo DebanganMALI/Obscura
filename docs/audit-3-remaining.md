@@ -42,7 +42,8 @@ Tests went 211 -> 271.
 - `location`'s settings file is tested, including that forgetting the vault
   location leaves the auto-lock alone.
 - Thirteen commands run end-to-end on `MockRuntime`, including the rollback
-  refusal. Linux only - see `testing.md`.
+  refusal. Linux only at the time; they now run on Windows too - see
+  `testing.md`.
 - `cargo mutants` on Linux: 464 of 465 killable mutants caught. See
   `mutation-testing.md`.
 

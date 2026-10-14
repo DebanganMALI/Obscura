@@ -2276,7 +2276,7 @@ mod two_factor {
     }
 }
 
-#[cfg(all(test, not(target_os = "windows")))]
+#[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::panic)]
 mod wiring {
     use super::*;

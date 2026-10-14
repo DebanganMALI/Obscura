@@ -351,7 +351,7 @@ Planned for 0.2.0, roughly in this order:
       still no npm dependencies
 - [x] Tests for the terminal browser against ratatui's test backend
 - [x] Ship the `obscura` command line tool as a release download
-- [ ] Run the application-level tests on Windows as well as Linux
+- [x] Run the application-level tests on Windows as well as Linux
 - [ ] A password health view: reused, weak and old passwords, computed locally
 - [ ] Lock secret memory pages with `VirtualLock` and `mlock`, so keys cannot be
       written to swap
