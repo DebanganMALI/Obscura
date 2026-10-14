@@ -7,7 +7,7 @@ use std::{
 use obscura_crypto::{
     aead, derive,
     hybrid::{self, HybridSecretKey},
-    kdf, mac, KdfParams, SecretBytes, SecretKey, KEY_LEN,
+    kdf, mac, KdfParams, LockedKey, SecretBytes, SecretKey, KEY_LEN,
 };
 use time::OffsetDateTime;
 use uuid::Uuid;
@@ -63,7 +63,7 @@ pub fn temp_path(vault: &Path) -> PathBuf {
 
 pub struct Vault {
     header: VaultHeader,
-    key: SecretKey,
+    key: LockedKey,
     entries: Vec<Entry>,
 }
 
@@ -78,7 +78,7 @@ impl Vault {
 
         let vault_id = Uuid::new_v4();
         let salt = kdf::random_salt()?;
-        let vault_key = SecretKey::random()?;
+        let vault_key = LockedKey::random()?;
         let now = OffsetDateTime::now_utc();
 
         let mut slot = KeySlot {
@@ -161,7 +161,7 @@ impl Vault {
 
         Ok(Self {
             header,
-            key: vault_key,
+            key: LockedKey::copy_of(&vault_key),
             entries,
         })
     }
@@ -284,7 +284,7 @@ impl Vault {
 
     pub fn accepts(&self, credential: &Credential<'_>) -> Result<bool, VaultError> {
         match unlock(&self.header, credential, KdfParams::from(self.header.kdf)) {
-            Ok(key) => Ok(key == self.key),
+            Ok(key) => Ok(key == *self.key),
             Err(VaultError::NoMatchingSlot) => Ok(false),
             Err(other) => Err(other),
         }
@@ -323,12 +323,11 @@ impl Vault {
         let kek = kdf::derive_key(new_password, &salt, params)?;
 
         let vault_id = self.header.vault_id;
-        let vault_key = self.key.clone();
         let mut rewrapped = 0usize;
 
         for slot in &mut self.header.slots {
             if slot.kind == SlotKind::Password {
-                slot.wrapped_key = aead::seal(&kek, &slot.aad(vault_id), vault_key.expose())?;
+                slot.wrapped_key = aead::seal(&kek, &slot.aad(vault_id), self.key.expose())?;
                 rewrapped += 1;
             }
         }
@@ -385,6 +384,11 @@ impl Vault {
     #[must_use]
     pub const fn id(&self) -> Uuid {
         self.header.vault_id
+    }
+
+    #[must_use]
+    pub const fn key_locked(&self) -> bool {
+        self.key.is_locked()
     }
 
     #[must_use]

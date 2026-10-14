@@ -78,7 +78,62 @@ impl<const N: usize> core::fmt::Debug for SecretBytes<N> {
 
 pub type SecretKey = SecretBytes<KEY_LEN>;
 
+pub struct LockedBytes<const N: usize> {
+    value: Box<SecretBytes<N>>,
+    region: obscura_memlock::Region,
+}
+
+impl<const N: usize> LockedBytes<N> {
+    #[must_use]
+    pub fn copy_of(source: &SecretBytes<N>) -> Self {
+        let mut value = Box::new(SecretBytes::zeroed());
+        let region = obscura_memlock::lock(&*value);
+        value.expose_mut().copy_from_slice(source.expose());
+        Self { value, region }
+    }
+
+    pub fn random() -> Result<Self, CryptoError> {
+        use rand_core::{OsRng, TryRngCore};
+        let mut value = Box::new(SecretBytes::zeroed());
+        let region = obscura_memlock::lock(&*value);
+        OsRng
+            .try_fill_bytes(value.expose_mut())
+            .map_err(|_| CryptoError::Rng)?;
+        Ok(Self { value, region })
+    }
+
+    #[must_use]
+    pub const fn is_locked(&self) -> bool {
+        self.region.is_locked()
+    }
+}
+
+impl<const N: usize> core::ops::Deref for LockedBytes<N> {
+    type Target = SecretBytes<N>;
+
+    fn deref(&self) -> &SecretBytes<N> {
+        &self.value
+    }
+}
+
+impl<const N: usize> Drop for LockedBytes<N> {
+    fn drop(&mut self) {
+        self.value.zeroize();
+    }
+}
+
+impl<const N: usize> ZeroizeOnDrop for LockedBytes<N> {}
+
+impl<const N: usize> core::fmt::Debug for LockedBytes<N> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "LockedBytes<{N}>(<redacted>)")
+    }
+}
+
+pub type LockedKey = LockedBytes<KEY_LEN>;
+
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
 
@@ -88,5 +143,21 @@ mod tests {
         let none = SecretBytes::<0>::zeroed();
         assert_eq!((full.len(), full.is_empty()), (32, false));
         assert_eq!((none.len(), none.is_empty()), (0, true));
+    }
+
+    #[test]
+    fn a_locked_copy_holds_the_same_bytes_in_locked_memory() {
+        let source = SecretKey::from_bytes([7u8; KEY_LEN]);
+        let locked = LockedKey::copy_of(&source);
+        assert!(locked.is_locked());
+        assert_eq!(*locked, source);
+        assert_eq!(format!("{locked:?}"), "LockedBytes<32>(<redacted>)");
+    }
+
+    #[test]
+    fn a_random_locked_key_is_locked_and_not_zero() {
+        let key = LockedKey::random().unwrap();
+        assert!(key.is_locked());
+        assert_ne!(*key, SecretKey::zeroed());
     }
 }

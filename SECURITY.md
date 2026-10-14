@@ -107,6 +107,25 @@ meter in the interface asks the same Rust code, so it cannot disagree with the
 check that decides. A vault made before these rules still opens with its
 existing password.
 
+## Secrets in memory
+
+While a vault is open, the vault key and every password, note, custom field and
+two-factor secret are held in memory pages locked with `VirtualLock` on Windows
+or `mlock` on Linux, so the operating system does not write them to the page
+file or swap. Pages are counted, so a page shared by two secrets stays locked
+until both are gone, and each secret is zeroized before its page is released.
+
+At start-up both programs also keep secrets out of crash reports: on Windows,
+Windows Error Reporting is told to leave the heap out of its dumps, and the
+working set is raised so there is room to lock; on Linux, core dumps are
+switched off and the process is marked non-dumpable, which also stops other
+processes running as you from attaching to it.
+
+Locking is best effort. If the operating system refuses, Obscura keeps
+working and the secret is still zeroized when it is dropped. All of this lives
+in `obscura-memlock`, the only crate besides the WebAuthn bindings that
+contains `unsafe` code.
+
 ## Verifying a release
 
 Every release includes a `SHA256SUMS` file, a CycloneDX SBOM, and signed build
@@ -139,8 +158,12 @@ same way and has its own SBOM, `obscura-cli_<tag>.cdx.json`.
 - Obscura has not been independently audited.
 - The interface's logic is tested, but the way it drives the page is checked
   only by hand.
-- Secrets are zeroized when dropped, but their pages are not locked. A secret
-  can reach swap or a crash dump before it is wiped.
+- Memory locking covers secrets that live as long as the vault is open. A
+  password is briefly in ordinary memory while it is typed, decrypted or
+  copied, and the interface's web view holds what it displays. Hibernation
+  writes all memory to disk, locked pages included. An administrator can still
+  read Obscura's memory directly, and so on Windows can any process running as
+  you.
 - The rollback watermark is a local file in the application config directory.
   An attacker who can delete it gets a vault that looks new to Obscura.
 - The common-password list is a fixed snapshot. It is not a check against a

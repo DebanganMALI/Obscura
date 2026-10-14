@@ -25,6 +25,7 @@ tauri-build      = { workspace = true }
 
 [dependencies]
 obscura-crypto   = { workspace = true }
+obscura-memlock  = { workspace = true }
 obscura-vault    = { workspace = true }
 obscura-platform = { workspace = true }
 obscura-webauthn = { workspace = true }

@@ -5,7 +5,7 @@ key protects what.
 
 ## The shape of the program
 
-Five library crates and two front ends. The cryptography does not know what a
+Six library crates and two front ends. The cryptography does not know what a
 vault is, the vault does not know what an operating system is, and neither knows
 there is a user interface.
 
@@ -29,11 +29,14 @@ there is a user interface.
             |
             |  obscura-platform  Windows Hello, file permissions
             |  obscura-webauthn  WebAuthn PRF for phone passkeys
+            |  obscura-memlock   locked pages, no secrets in crash dumps
             v
           ui/
    four static files, no npm, default-src 'none'
 ```
 
+`obscura-memlock` sits under `obscura-crypto` and `obscura-vault`, so every
+secret they hold for longer than a single operation lives in locked memory.
 `obscura-platform` and `obscura-webauthn` are only reached from the desktop
 application. Both compile to stubs on platforms that do not have the underlying
 API, so the workspace builds everywhere.
@@ -193,7 +196,7 @@ crates/
     derive.rs            HKDF-SHA512 subkeys
     hybrid.rs            X25519 + ML-KEM-768 encapsulation
     mac.rs               keyed BLAKE3
-    secret.rs            SecretBytes, zeroized on drop
+    secret.rs            SecretBytes, zeroized on drop; LockedBytes, also locked
 
   obscura-vault/         the format and the data model
     format.rs            byte layout, header, key slots, AAD construction
@@ -204,7 +207,11 @@ crates/
     generator.rs         password and passphrase generation
     csv_import.rs        importing from other managers
     portable.rs          encrypted export and import
+    secret.rs            SecretString, locked and zeroized on drop
 
+  obscura-memlock/       lib.rs        counted page locks, process hardening
+                         unix.rs       mlock, core dumps off, non-dumpable
+                         windows.rs    VirtualLock, working set, WER without heap
   obscura-platform/      hello.rs      Windows Hello, file permissions
   obscura-webauthn/      imp.rs        Windows WebAuthn PRF
                          stub.rs       everything else
@@ -244,8 +251,6 @@ disk it sits on.
 
 ## Deliberate absences
 
-- **No `mlock` / `VirtualLock`.** Secrets are zeroized, but nothing stops a page
-  reaching swap or a crash dump first.
 - **No network code of any kind.** Not a disabled feature - the application has
   no HTTP client, and the interface's content security policy is
   `default-src 'none'`.

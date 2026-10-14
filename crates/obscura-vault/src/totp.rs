@@ -5,7 +5,7 @@ use sha2::{Sha256, Sha512};
 use subtle::ConstantTimeEq;
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
-use crate::error::VaultError;
+use crate::{error::VaultError, secret::SecretBuf};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub enum TotpAlgorithm {
@@ -37,7 +37,7 @@ impl TotpAlgorithm {
 
 #[derive(Clone, Serialize, Deserialize, Zeroize, ZeroizeOnDrop)]
 pub struct Totp {
-    secret: Vec<u8>,
+    secret: SecretBuf,
     #[zeroize(skip)]
     algorithm: TotpAlgorithm,
     digits: u8,
@@ -65,7 +65,7 @@ impl Totp {
             return Err(VaultError::TotpConfig("period must be at least 1 second"));
         }
         Ok(Self {
-            secret,
+            secret: SecretBuf::new(secret),
             algorithm,
             digits,
             period,
@@ -113,9 +113,9 @@ impl Totp {
         let message = counter.to_be_bytes();
 
         let digest = match self.algorithm {
-            TotpAlgorithm::Sha1 => hmac_bytes::<Sha1>(&self.secret, &message)?,
-            TotpAlgorithm::Sha256 => hmac_bytes::<Sha256>(&self.secret, &message)?,
-            TotpAlgorithm::Sha512 => hmac_bytes::<Sha512>(&self.secret, &message)?,
+            TotpAlgorithm::Sha1 => hmac_bytes::<Sha1>(self.secret.expose(), &message)?,
+            TotpAlgorithm::Sha256 => hmac_bytes::<Sha256>(self.secret.expose(), &message)?,
+            TotpAlgorithm::Sha512 => hmac_bytes::<Sha512>(self.secret.expose(), &message)?,
         };
 
         Ok(truncate(&digest, self.digits))
@@ -191,7 +191,7 @@ impl Totp {
         let mut uri = format!(
             "otpauth://totp/{}?secret={}&algorithm={}&digits={}&period={}",
             percent_encode(&label),
-            base32_encode(&self.secret),
+            base32_encode(self.secret.expose()),
             self.algorithm.as_str(),
             self.digits,
             self.period
@@ -206,7 +206,7 @@ impl Totp {
 
 impl PartialEq for Totp {
     fn eq(&self, other: &Self) -> bool {
-        let secret_matches: bool = self.secret.ct_eq(&other.secret).into();
+        let secret_matches: bool = self.secret.expose().ct_eq(other.secret.expose()).into();
         secret_matches
             && self.algorithm == other.algorithm
             && self.digits == other.digits
