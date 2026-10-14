@@ -285,10 +285,10 @@ mod verification {
                     .starts_with(".obscura-write-test-")
             })
             .collect();
-        assert!(
-            left.is_empty(),
-            "the writability probe left {} file(s) behind in the user's folder",
-            left.len()
+        assert_eq!(
+            left.len(),
+            0,
+            "the writability probe left files behind in the user's folder"
         );
     }
 
