@@ -26,7 +26,7 @@ pub enum Outcome {
     Locked,
 }
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Mode {
     Browse,
     Filter,
@@ -48,7 +48,7 @@ struct App<'v> {
 }
 
 impl<'v> App<'v> {
-    fn new(vault: &'v Vault, idle: Duration) -> Self {
+    fn new(vault: &'v Vault, idle: Duration, clipboard: Option<arboard::Clipboard>) -> Self {
         let shown = ordered(vault, None);
         let mut state = ListState::default();
         if !shown.is_empty() {
@@ -64,7 +64,7 @@ impl<'v> App<'v> {
             flash: None,
             last_input: Instant::now(),
             idle,
-            clipboard: arboard::Clipboard::new().ok(),
+            clipboard,
             copied: false,
         }
     }
@@ -165,6 +165,18 @@ impl<'v> App<'v> {
         }
     }
 
+    fn expired(&self) -> bool {
+        self.last_input.elapsed() >= self.idle
+    }
+
+    fn age_flash(&mut self) {
+        if let Some((_, _, at)) = self.flash {
+            if at.elapsed() >= FLASH {
+                self.flash = None;
+            }
+        }
+    }
+
     fn remaining(&self) -> u64 {
         self.idle
             .saturating_sub(self.last_input.elapsed())
@@ -234,7 +246,7 @@ pub fn run(vault: &Vault, idle: Duration) -> Result<Outcome> {
 }
 
 fn drive(terminal: &mut DefaultTerminal, vault: &Vault, idle: Duration) -> Result<Outcome> {
-    let mut app = App::new(vault, idle);
+    let mut app = App::new(vault, idle, arboard::Clipboard::new().ok());
 
     let outcome = loop {
         terminal.draw(|frame| draw(frame, &mut app))?;
@@ -247,13 +259,9 @@ fn drive(terminal: &mut DefaultTerminal, vault: &Vault, idle: Duration) -> Resul
             }
         }
 
-        if let Some((_, _, at)) = app.flash {
-            if at.elapsed() >= FLASH {
-                app.flash = None;
-            }
-        }
+        app.age_flash();
 
-        if app.last_input.elapsed() >= app.idle {
+        if app.expired() {
             break Outcome::Locked;
         }
     };
@@ -512,4 +520,318 @@ fn help_overlay(frame: &mut Frame, area: Rect) {
 
     frame.render_widget(Clear, centre);
     frame.render_widget(Paragraph::new(lines).block(block), centre);
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used, clippy::indexing_slicing)]
+mod tests {
+    use super::*;
+    use obscura_vault::{CustomField, SecretString, Totp};
+    use ratatui::backend::TestBackend;
+    use ratatui::Terminal;
+
+    const FAST: obscura_crypto::KdfParams = obscura_crypto::KdfParams {
+        m_cost_kib: 64 * 1024,
+        t_cost: 2,
+        p_cost: 1,
+    };
+
+    const GITHUB_PASSWORD: &str = "gh-secret-password-1";
+    const BANK_PASSWORD: &str = "bank-secret-password-2";
+    const PIN: &str = "4242-9191";
+
+    fn empty_vault() -> Vault {
+        Vault::create(b"lantern mango quiet orbit tamarind", FAST).unwrap()
+    }
+
+    fn a_vault() -> Vault {
+        let mut vault = empty_vault();
+
+        let mut github = Entry::new_login("GitHub", "saheb");
+        github.set_password(GITHUB_PASSWORD);
+        github.favorite = true;
+        github.urls.push("https://github.com".to_owned());
+        github.totp = Some(
+            Totp::from_uri("otpauth://totp/GitHub:saheb?secret=JBSWY3DPEHPK3PXP&issuer=GitHub")
+                .unwrap(),
+        );
+        github.custom_fields.push(CustomField {
+            name: "PIN".to_owned(),
+            value: SecretString::from(PIN),
+            hidden: true,
+        });
+        vault.add(github).unwrap();
+
+        let mut bank = Entry::new_login("Bank", "");
+        bank.set_password(BANK_PASSWORD);
+        vault.add(bank).unwrap();
+
+        let mut email = Entry::new_login("Email", "me@example.com");
+        email.set_password("mail-secret-password-3");
+        vault.add(email).unwrap();
+
+        vault
+    }
+
+    fn app(vault: &Vault) -> App<'_> {
+        App::new(vault, Duration::from_secs(300), None)
+    }
+
+    fn screen(app: &mut App) -> String {
+        let mut terminal = Terminal::new(TestBackend::new(110, 30)).unwrap();
+        terminal.draw(|frame| draw(frame, app)).unwrap();
+        let buffer = terminal.backend().buffer();
+        let width = usize::from(buffer.area.width);
+        buffer
+            .content()
+            .chunks(width)
+            .map(|row| {
+                row.iter()
+                    .map(ratatui::buffer::Cell::symbol)
+                    .collect::<String>()
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+
+    fn press(app: &mut App, code: KeyCode) -> bool {
+        app.on_key(KeyEvent::new(code, KeyModifiers::NONE))
+    }
+
+    fn title(app: &App) -> String {
+        app.current()
+            .map(|entry| entry.title.clone())
+            .unwrap_or_default()
+    }
+
+    #[test]
+    fn favourites_come_first_and_the_count_is_shown() {
+        let vault = a_vault();
+        let mut app = app(&vault);
+        let shown = screen(&mut app);
+
+        assert!(shown.contains("3 entries"), "{shown}");
+        assert_eq!(title(&app), "GitHub");
+        let order: Vec<&str> = app.shown.iter().map(|entry| entry.title.as_str()).collect();
+        assert_eq!(order, ["GitHub", "Bank", "Email"]);
+    }
+
+    #[test]
+    fn secrets_stay_hidden_until_revealed_and_hide_again() {
+        let vault = a_vault();
+        let mut app = app(&vault);
+
+        let hidden = screen(&mut app);
+        assert!(!hidden.contains(GITHUB_PASSWORD), "{hidden}");
+        assert!(!hidden.contains(PIN), "{hidden}");
+        assert!(hidden.contains("GITHUB"), "{hidden}");
+
+        press(&mut app, KeyCode::Char('r'));
+        let shown = screen(&mut app);
+        assert!(shown.contains(GITHUB_PASSWORD), "{shown}");
+        assert!(shown.contains(PIN), "{shown}");
+
+        press(&mut app, KeyCode::Char('r'));
+        let again = screen(&mut app);
+        assert!(!again.contains(GITHUB_PASSWORD), "{again}");
+        assert!(!again.contains(PIN), "{again}");
+    }
+
+    #[test]
+    fn only_the_selected_entry_is_ever_on_screen() {
+        let vault = a_vault();
+        let mut app = app(&vault);
+        press(&mut app, KeyCode::Char('r'));
+
+        let first = screen(&mut app);
+        assert!(first.contains(GITHUB_PASSWORD));
+        assert!(!first.contains(BANK_PASSWORD));
+
+        press(&mut app, KeyCode::Char('j'));
+        let second = screen(&mut app);
+        assert!(second.contains(BANK_PASSWORD));
+        assert!(!second.contains(GITHUB_PASSWORD));
+    }
+
+    #[test]
+    fn moving_wraps_round_at_both_ends() {
+        let vault = a_vault();
+        let mut app = app(&vault);
+
+        press(&mut app, KeyCode::Char('k'));
+        assert_eq!(title(&app), "Email");
+        press(&mut app, KeyCode::Char('j'));
+        assert_eq!(title(&app), "GitHub");
+        press(&mut app, KeyCode::Down);
+        assert_eq!(title(&app), "Bank");
+        press(&mut app, KeyCode::Up);
+        assert_eq!(title(&app), "GitHub");
+    }
+
+    #[test]
+    fn a_filter_narrows_the_list_and_escape_brings_everything_back() {
+        let vault = a_vault();
+        let mut app = app(&vault);
+
+        press(&mut app, KeyCode::Char('/'));
+        for c in "bank".chars() {
+            assert!(!press(&mut app, KeyCode::Char(c)));
+        }
+        assert_eq!(app.shown.len(), 1);
+        assert_eq!(title(&app), "Bank");
+        assert!(screen(&mut app).contains("filter > bank"));
+
+        assert!(
+            !press(&mut app, KeyCode::Char('q')),
+            "q while filtering is a letter, not quit"
+        );
+        assert!(app.shown.is_empty());
+        assert!(screen(&mut app).contains("Nothing matches that."));
+
+        press(&mut app, KeyCode::Backspace);
+        assert_eq!(title(&app), "Bank");
+
+        press(&mut app, KeyCode::Esc);
+        assert_eq!(app.mode, Mode::Browse);
+        assert!(app.filter.is_empty());
+        assert_eq!(app.shown.len(), 3);
+    }
+
+    #[test]
+    fn enter_keeps_the_filter_and_returns_to_browsing() {
+        let vault = a_vault();
+        let mut app = app(&vault);
+
+        press(&mut app, KeyCode::Char('/'));
+        for c in "mail".chars() {
+            press(&mut app, KeyCode::Char(c));
+        }
+        press(&mut app, KeyCode::Enter);
+
+        assert_eq!(app.mode, Mode::Browse);
+        assert_eq!(app.shown.len(), 1);
+        assert_eq!(title(&app), "Email");
+        assert!(
+            press(&mut app, KeyCode::Char('q')),
+            "back in browse mode, q quits again"
+        );
+    }
+
+    #[test]
+    fn the_help_overlay_opens_and_any_key_closes_it_without_acting() {
+        let vault = a_vault();
+        let mut app = app(&vault);
+
+        press(&mut app, KeyCode::Char('?'));
+        assert!(screen(&mut app).contains("quit and wipe the clipboard"));
+
+        assert!(
+            !press(&mut app, KeyCode::Char('q')),
+            "the key that closes help must not also quit"
+        );
+        assert_eq!(app.mode, Mode::Browse);
+        assert!(!screen(&mut app).contains("quit and wipe the clipboard"));
+    }
+
+    #[test]
+    fn q_escape_and_control_c_all_quit() {
+        let vault = a_vault();
+        let mut app = app(&vault);
+
+        assert!(press(&mut app, KeyCode::Char('q')));
+        assert!(press(&mut app, KeyCode::Esc));
+        assert!(app.on_key(KeyEvent::new(KeyCode::Char('c'), KeyModifiers::CONTROL)));
+        assert!(!press(&mut app, KeyCode::Char('c')));
+    }
+
+    #[test]
+    fn copying_without_a_clipboard_says_so_and_leaves_nothing_to_wipe() {
+        let vault = a_vault();
+        let mut app = app(&vault);
+
+        press(&mut app, KeyCode::Char('p'));
+        assert!(screen(&mut app).contains("no clipboard available here"));
+        assert!(!app.copied);
+    }
+
+    #[test]
+    fn copying_something_an_entry_does_not_have_says_what_is_missing() {
+        let vault = a_vault();
+        let mut app = app(&vault);
+        press(&mut app, KeyCode::Char('j'));
+        assert_eq!(title(&app), "Bank");
+
+        press(&mut app, KeyCode::Char('u'));
+        assert!(screen(&mut app).contains("no username on this entry"));
+
+        press(&mut app, KeyCode::Char('t'));
+        assert!(screen(&mut app).contains("no one time code on this entry"));
+    }
+
+    #[test]
+    fn a_message_fades_and_the_key_hints_come_back() {
+        let vault = a_vault();
+        let mut app = app(&vault);
+
+        press(&mut app, KeyCode::Char('p'));
+        app.age_flash();
+        assert!(app.flash.is_some());
+
+        let old = Instant::now().checked_sub(FLASH).unwrap();
+        if let Some(flash) = app.flash.as_mut() {
+            flash.2 = old;
+        }
+        app.age_flash();
+        assert!(app.flash.is_none());
+        assert!(screen(&mut app).contains("p password"));
+    }
+
+    #[test]
+    fn the_browser_locks_once_it_has_been_idle_long_enough() {
+        let vault = a_vault();
+
+        let mut waiting = app(&vault);
+        assert!(!waiting.expired());
+        assert!(waiting.remaining() > 290);
+        assert!(screen(&mut waiting).contains("locks in"));
+
+        let mut idle = App::new(&vault, Duration::ZERO, None);
+        assert!(idle.expired());
+        assert_eq!(idle.remaining(), 0);
+
+        idle.idle = Duration::from_secs(300);
+        idle.last_input = Instant::now()
+            .checked_sub(Duration::from_secs(301))
+            .unwrap();
+        assert!(idle.expired());
+        press(&mut idle, KeyCode::Char('j'));
+        assert!(!idle.expired(), "any key resets the idle clock");
+    }
+
+    #[test]
+    fn an_empty_vault_says_so_and_no_key_breaks_it() {
+        let vault = empty_vault();
+        let mut app = app(&vault);
+
+        let shown = screen(&mut app);
+        assert!(shown.contains("0 entries"), "{shown}");
+        assert!(shown.contains("Nothing in this vault yet."), "{shown}");
+
+        for code in ['j', 'k', 'p', 'u', 't', 'r'].map(KeyCode::Char) {
+            assert!(!press(&mut app, code));
+        }
+        assert!(app.current().is_none());
+        screen(&mut app);
+    }
+
+    #[test]
+    fn a_one_time_code_is_shown_split_in_the_middle() {
+        assert_eq!(spaced("123456"), "123 456");
+        assert_eq!(spaced("12345678"), "1234 5678");
+
+        let vault = a_vault();
+        let mut app = app(&vault);
+        let shown = screen(&mut app);
+        assert!(shown.contains("code"), "{shown}");
+    }
 }

@@ -2909,6 +2909,7 @@ version = "0.1.1"
 dependencies = [
  "anyhow",
  "arboard",
+ "obscura-crypto",
  "obscura-vault",
  "ratatui",
  "rpassword",

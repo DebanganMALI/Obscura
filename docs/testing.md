@@ -61,3 +61,17 @@ that is not registered, or looks up an element id the page does not have.
 No npm package is involved. What is still not tested: the DOM work in `app.js`
 itself. A browser harness would cover it, at the cost of a dependency this
 project has so far managed without.
+
+## The terminal browser
+
+`obscura` with no command opens a browser drawn with ratatui. Its tests in
+`crates/obscura-cli/src/tui.rs` render it into ratatui's `TestBackend`, a
+screen held in memory, and read the screen back as text. They press keys the
+way a person would and check what ends up on screen: a password appears only
+after `r` and only for the selected entry, `q` typed into the filter is a
+letter rather than quit, the key that closes the help overlay does nothing
+else, and an idle browser reports itself locked.
+
+The tests never touch the system clipboard. The browser takes its clipboard as
+an argument, the tests pass none, and the copy keys are checked through the
+message they show instead.
