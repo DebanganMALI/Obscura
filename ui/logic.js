@@ -215,6 +215,40 @@ const ObscuraLogic = (() => {
     return Boolean(result.totpDropped || result.skipped);
   }
 
+  function healthSummary(report) {
+    const checked = report.checked || 0;
+    if (!checked) return "There are no passwords to check yet.";
+    const reused = report.reused.reduce((n, group) => n + group.length, 0);
+    const parts = [];
+    if (reused) parts.push(reused + " reused");
+    if (report.weak.length) parts.push(report.weak.length + " weak");
+    if (report.stale.length) parts.push(report.stale.length + " unchanged for over a year");
+    const whole = many(checked, "password", "passwords");
+    if (!parts.length) {
+      return checked === 1
+        ? "Your one password is unique, strong enough and changed within a year."
+        : "All " + whole + " are unique, strong enough and changed within a year.";
+    }
+    return "Of " + whole + ": " + parts.join(", ") + ".";
+  }
+
+  function healthItem(item) {
+    return {
+      id: item.id,
+      title: item.title,
+      sub: item.username ? item.username + "  -  " + item.note : item.note,
+    };
+  }
+
+  function healthSections(report) {
+    const sections = [
+      { key: "reused", title: "Reused", items: report.reused.flat().map(healthItem) },
+      { key: "weak", title: "Weak", items: report.weak.map(healthItem) },
+      { key: "stale", title: "Not changed for a year", items: report.stale.map(healthItem) },
+    ];
+    return sections.filter((section) => section.items.length);
+  }
+
   function codeGroups(code) {
     return String(code || "").split("-").filter(Boolean);
   }
@@ -257,6 +291,8 @@ const ObscuraLogic = (() => {
     slotRemoved,
     importMessage,
     importWarns,
+    healthSummary,
+    healthSections,
     codeGroups,
     shortcut,
   });

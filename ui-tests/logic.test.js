@@ -282,6 +282,39 @@ test("an import reports what it added and everything it could not", () => {
   assert.equal(L.importWarns({ renumbered: 4 }), false);
 });
 
+const healthy = { checked: 3, reused: [], weak: [], stale: [] };
+const troubled = {
+  checked: 14,
+  reused: [
+    [
+      { id: "a", title: "Bank", username: "saheb", note: "the same password as one other entry" },
+      { id: "b", title: "Mail", username: "", note: "the same password as one other entry" },
+    ],
+  ],
+  weak: [{ id: "c", title: "Forum", username: "me", note: "shorter than 10 characters" }],
+  stale: [],
+};
+
+test("the health summary counts each problem and says so plainly when there are none", () => {
+  assert.equal(L.healthSummary(troubled), "Of 14 passwords: 2 reused, 1 weak.");
+  assert.equal(L.healthSummary(healthy),
+    "All 3 passwords are unique, strong enough and changed within a year.");
+  assert.equal(L.healthSummary({ checked: 1, reused: [], weak: [], stale: [] }),
+    "Your one password is unique, strong enough and changed within a year.");
+  assert.equal(L.healthSummary({ checked: 0, reused: [], weak: [], stale: [] }),
+    "There are no passwords to check yet.");
+});
+
+test("health sections list only the problems that exist, with the username beside the reason", () => {
+  const sections = L.healthSections(troubled);
+  assert.deepEqual(sections.map((section) => section.key), ["reused", "weak"]);
+  assert.deepEqual(sections[0].items, [
+    { id: "a", title: "Bank", sub: "saheb  -  the same password as one other entry" },
+    { id: "b", title: "Mail", sub: "the same password as one other entry" },
+  ]);
+  assert.deepEqual(L.healthSections(healthy), []);
+});
+
 test("a recovery code is shown in the groups it is printed in", () => {
   assert.deepEqual(L.codeGroups("GCGTKCC3-7N838YC8-TSJE6QB0"), ["GCGTKCC3", "7N838YC8", "TSJE6QB0"]);
   assert.deepEqual(L.codeGroups(""), []);
