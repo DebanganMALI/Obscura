@@ -5,6 +5,7 @@ pub mod entry;
 pub mod error;
 pub mod format;
 pub mod generator;
+pub mod health;
 pub mod policy;
 pub mod portable;
 pub mod recovery;

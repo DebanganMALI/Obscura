@@ -67,6 +67,8 @@ The same vault from a terminal. `obscura` on its own opens a browsable view;
 - **Rollback detection** — a keyed BLAKE3 watermark kept outside the vault and
   checked at every unlock, so a restored older copy is noticed rather than
   silently accepted
+- **Password health** — reused, weak and year-old passwords, worked out in Rust
+  on your machine. The report names entries and reasons, never a password
 - **TOTP codes**, a password generator, CSV import from other managers, and
   encrypted export
 - **Auto-lock on idle**, timed against both a monotonic and a wall clock, so a
@@ -353,7 +355,7 @@ Planned for 0.2.0, roughly in this order:
 - [x] Tests for the terminal browser against ratatui's test backend
 - [x] Ship the `obscura` command line tool as a release download
 - [x] Run the application-level tests on Windows as well as Linux
-- [ ] A password health view: reused, weak and old passwords, computed locally
+- [x] A password health view: reused, weak and old passwords, computed locally
 - [ ] Lock secret memory pages with `VirtualLock` and `mlock`, so keys cannot be
       written to swap
 - [ ] A written threat model, and a security posture document mapped to the
