@@ -127,6 +127,24 @@ pub struct GeneratedPassword {
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct HealthItem {
+    pub id: Uuid,
+    pub title: String,
+    pub username: String,
+    pub note: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HealthReport {
+    pub checked: usize,
+    pub reused: Vec<Vec<HealthItem>>,
+    pub weak: Vec<HealthItem>,
+    pub stale: Vec<HealthItem>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct PasswordCheck {
     pub score: u8,
     pub problem: Option<String>,

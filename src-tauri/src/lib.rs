@@ -50,6 +50,7 @@ pub fn run() {
             commands::totp_code,
             commands::generate,
             commands::assess_password,
+            commands::password_health,
             commands::change_master_password,
             commands::set_master_password,
             commands::reset_master_password,

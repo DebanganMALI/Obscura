@@ -45,6 +45,9 @@
   <symbol id="i-clock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
     <circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 1.8"/>
   </symbol>
+  <symbol id="i-pulse" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M3 12h4l2.5-6 5 12 2.5-6h4"/>
+  </symbol>
 </svg>
 
 <main id="gate" class="gate">
@@ -125,6 +128,9 @@
       <input type="search" id="search" placeholder="Search vault" spellcheck="false" autocomplete="off">
     </div>
 
+    <button class="icon-btn" id="btn-health" title="Password health">
+      <svg><use href="#i-pulse"/></svg>
+    </button>
     <button class="icon-btn" id="btn-generator" title="Password generator (Ctrl+G)">
       <svg><use href="#i-dice"/></svg>
     </button>
@@ -259,6 +265,17 @@
       <button class="btn btn--ghost" type="button" data-close="gen-scrim">Close</button>
       <button class="btn btn--ghost" type="button" id="gen-again">Regenerate</button>
       <button class="btn btn--primary" type="button" id="gen-copy">Copy</button>
+    </div>
+  </div>
+</div>
+
+<div class="scrim" id="health-scrim" hidden>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="health-title">
+    <h2 class="modal__title" id="health-title">Password health</h2>
+    <p class="serif-it lede" id="health-summary"></p>
+    <div id="health-body"></div>
+    <div class="modal__foot">
+      <button class="btn btn--ghost" type="button" data-close="health-scrim">Close</button>
     </div>
   </div>
 </div>

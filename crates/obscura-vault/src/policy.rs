@@ -3,6 +3,8 @@ use std::sync::LazyLock;
 
 pub const MIN_PASSWORD_CHARS: usize = 15;
 
+pub const MIN_ENTRY_CHARS: usize = 10;
+
 const APP_NAME: &str = "obscura";
 
 const COMMON: &str = include_str!("common-passwords.txt");
@@ -67,6 +69,14 @@ pub fn weakness(password: &str) -> Option<Weakness> {
         }
     }
     None
+}
+
+#[must_use]
+pub fn entry_weakness(password: &str) -> Option<Weakness> {
+    if password.chars().count() < MIN_ENTRY_CHARS {
+        return Some(Weakness::TooShort);
+    }
+    shape_of(&password.to_lowercase())
 }
 
 #[must_use]
