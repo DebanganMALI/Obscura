@@ -91,6 +91,20 @@ Installers are attached to each [release](https://github.com/DebanganMALI/Obscur
 | Fedora, RHEL | `Obscura-0.1.1-1.x86_64.rpm` |
 | Any Linux | `Obscura_0.1.1_amd64.AppImage` |
 
+### The command line tool on its own
+
+From 0.2.0, each release also carries `obscura` by itself, for terminals and
+scripts where the desktop application is not wanted.
+
+| Platform | File |
+| --- | --- |
+| Windows | `obscura-cli_<version>_x64-windows.zip` |
+| Linux | `obscura-cli_<version>_amd64-linux.tar.gz` |
+
+Unpack it into any folder on your `PATH`. It is listed in the same
+`SHA256SUMS`, carries the same signed build provenance as the installers, and
+has an SBOM of its own.
+
 ### Windows will warn you
 
 The installers are not code signed, so SmartScreen shows "Windows protected
@@ -336,7 +350,7 @@ Planned for 0.2.0, roughly in this order:
 - [x] Automated tests for the interface, using Node's built-in test runner and
       still no npm dependencies
 - [x] Tests for the terminal browser against ratatui's test backend
-- [ ] Ship the `obscura` command line tool as a release download
+- [x] Ship the `obscura` command line tool as a release download
 - [ ] Run the application-level tests on Windows as well as Linux
 - [ ] A password health view: reused, weak and old passwords, computed locally
 - [ ] Lock secret memory pages with `VirtualLock` and `mlock`, so keys cannot be
