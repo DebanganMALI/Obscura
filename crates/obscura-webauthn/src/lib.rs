@@ -5,14 +5,22 @@ use obscura_crypto::derive;
 #[cfg(target_os = "windows")]
 mod imp;
 
+#[cfg(target_os = "windows")]
+mod prompt;
+
 #[cfg(not(target_os = "windows"))]
 mod stub;
 
 #[cfg(target_os = "windows")]
 pub use imp::{api_version, console_window, enroll, label_for, prf_secret, transport_name};
 
+#[cfg(target_os = "windows")]
+pub use prompt::{watch_for_prompts, PromptWatch};
+
 #[cfg(not(target_os = "windows"))]
-pub use stub::{api_version, enroll, label_for, prf_secret, transport_name};
+pub use stub::{
+    api_version, enroll, label_for, prf_secret, transport_name, watch_for_prompts, PromptWatch,
+};
 
 pub const PRF_API_VERSION: u32 = 4;
 

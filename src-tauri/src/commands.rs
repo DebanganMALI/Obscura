@@ -1159,6 +1159,7 @@ pub fn hello_enroll<R: tauri::Runtime>(
 
     state.with_session(|session| {
         let vault_id = session.vault.id().to_string();
+        let _prompt = obscura_webauthn::watch_for_prompts();
         let seed = hello::enroll(&vault_id).map_err(|e| e.to_string())?;
         session
             .vault
@@ -1208,7 +1209,10 @@ pub fn unlock_with_hello<R: tauri::Runtime>(
     let (header, _, _) =
         obscura_vault::format::decode_header(&bytes).map_err(|e| unlock_failure(&e))?;
 
-    let seed = hello::unlock(&header.vault_id.to_string()).map_err(|e| hello_failure(&e))?;
+    let seed = {
+        let _prompt = obscura_webauthn::watch_for_prompts();
+        hello::unlock(&header.vault_id.to_string()).map_err(|e| hello_failure(&e))?
+    };
 
     let vault = Vault::from_bytes(
         &bytes,
@@ -1273,6 +1277,7 @@ pub fn passkey_enroll<R: tauri::Runtime>(
 
     state.with_session(|session| {
         let vault_id = session.vault.id().to_string();
+        let _prompt = obscura_webauthn::watch_for_prompts();
         let enrolled = obscura_webauthn::enroll(
             handle,
             obscura_webauthn::RP_ID,
@@ -1336,8 +1341,11 @@ pub fn unlock_with_passkey<R: tauri::Runtime>(
 
     let salt = obscura_webauthn::salt_for(&header.vault_id.to_string())
         .map_err(|e| passkey_failure(&e))?;
-    let seed = obscura_webauthn::prf_secret(handle, obscura_webauthn::RP_ID, &salt)
-        .map_err(|e| passkey_failure(&e))?;
+    let seed = {
+        let _prompt = obscura_webauthn::watch_for_prompts();
+        obscura_webauthn::prf_secret(handle, obscura_webauthn::RP_ID, &salt)
+            .map_err(|e| passkey_failure(&e))?
+    };
 
     let vault = Vault::from_bytes(
         &bytes,
