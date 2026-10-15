@@ -21,7 +21,7 @@ foreach ($logo in @("Square44x44Logo.png", "Square150x150Logo.png", "Square310x3
 }
 
 $manifest = [IO.File]::ReadAllText("packaging\windows\Package.appxmanifest")
-$manifest = [regex]::Replace($manifest, 'Version="\d+\.\d+\.\d+\.\d+"', "Version=`"$Version`"")
+$manifest = [regex]::Replace($manifest, '(?<=\s)Version="\d+\.\d+\.\d+\.\d+"', "Version=`"$Version`"")
 [IO.File]::WriteAllText("$dist\Package.appxmanifest", $manifest)
 
 $cert = "$out\DebanganMali.ObscuraVault_cert.pfx"
