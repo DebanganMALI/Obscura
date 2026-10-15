@@ -46,7 +46,7 @@ from attackers rather than controls.
 | 5.5 Contact with authorities | Not applicable | No service is operated and no user data is held, so there is nothing to report to a regulator |
 | 5.6 Contact with special interest groups | Met | The RustSec advisory database through `cargo deny`, and the GitHub Advisory Database through Dependabot |
 | 5.7 Threat intelligence | Met | Advisories are checked on every pull request; the password policy follows NIST SP 800-63B-4 and key wrapping uses ML-KEM-768 from FIPS 203 |
-| 5.8 Security in project management | Met | Security work is on the roadmap in the README, and each audit is written up with what it found, as in [audit-3-remaining.md](audit-3-remaining.md) |
+| 5.8 Security in project management | Met | Security work is planned with the features it protects and delivered through reviewed pull requests, and each audit is written up with what it found, as in [audit-3-remaining.md](audit-3-remaining.md) |
 | 5.9 Inventory of information and assets | Met | Every release carries CycloneDX SBOMs for the application and the command line tool; the threat model lists the information assets |
 | 5.10 Acceptable use | Not applicable | No shared assets or users to govern |
 | 5.11 Return of assets | Not applicable | No staff or equipment |
