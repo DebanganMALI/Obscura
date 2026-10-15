@@ -21,8 +21,7 @@ No account. No telemetry. No network code at all — not a disabled feature, but
 an application with no HTTP client in it.
 
 > **Status: early releases, 0.2.x.** Obscura has not been independently audited.
-> Keep a second copy of anything you cannot afford to lose. What is being built next is listed under
-> [Roadmap](#roadmap).
+> Keep a second copy of anything you cannot afford to lose.
 
 ## Screenshots
 
@@ -346,34 +345,6 @@ What the suite does **not** cover, and why, is in
 [docs/mutation-testing.md](docs/mutation-testing.md). The short version: the
 interface's logic is tested, but how it paints the page is still checked by
 hand.
-
-## Roadmap
-
-Done in 0.2.0:
-
-- [x] Refuse common, repetitive and sequential master passwords, with the
-      strength meter computed in Rust
-- [x] Keep each vault's rollback watermark independent, so resetting one never
-      weakens another
-- [x] Automated tests for the interface, using Node's built-in test runner and
-      still no npm dependencies
-- [x] Tests for the terminal browser against ratatui's test backend
-- [x] Ship the `obscura` command line tool as a release download
-- [x] Run the application-level tests on Windows as well as Linux
-- [x] A password health view: reused, weak and old passwords, computed locally
-- [x] Lock secret memory pages with `VirtualLock` and `mlock`, so keys cannot be
-      written to swap
-- [x] A written threat model, and a security posture document mapped to the
-      ISO/IEC 27001:2022 Annex A controls that apply to a single application
-
-Next:
-
-- [ ] Obscura Vault in the Microsoft Store, signed by Microsoft
-- [ ] Pin every GitHub Action by commit hash rather than version tag
-- [ ] A reminder to keep a copy of the vault somewhere other than this machine
-
-Later: Unicode normalisation of master passwords, which needs a migration path
-so existing non-ASCII passwords keep working.
 
 ## Security
 
