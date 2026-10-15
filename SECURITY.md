@@ -134,8 +134,8 @@ Every release includes a `SHA256SUMS` file, a CycloneDX SBOM, and signed build
 provenance for each file, recorded in a public transparency log.
 
 ```sh
-gh attestation verify Obscura_0.1.1_x64-setup.exe --repo DebanganMALI/Obscura
-gh attestation verify Obscura_0.1.1_x64-setup.exe --repo DebanganMALI/Obscura \
+gh attestation verify Obscura_0.2.0_x64-setup.exe --repo DebanganMALI/Obscura
+gh attestation verify Obscura_0.2.0_x64-setup.exe --repo DebanganMALI/Obscura \
   --predicate-type https://cyclonedx.org/bom
 ```
 
