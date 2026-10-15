@@ -34,3 +34,10 @@ pub fn prf_secret(
 ) -> Result<SecretBytes<32>, WebAuthnError> {
     Err(WebAuthnError::Unsupported)
 }
+
+pub struct PromptWatch;
+
+#[must_use]
+pub const fn watch_for_prompts() -> PromptWatch {
+    PromptWatch
+}

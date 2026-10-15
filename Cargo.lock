@@ -2963,6 +2963,7 @@ dependencies = [
  "obscura-crypto",
  "thiserror 2.0.21",
  "windows",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

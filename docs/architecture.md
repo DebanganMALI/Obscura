@@ -222,6 +222,7 @@ crates/
                          windows.rs    VirtualLock, working set, WER without heap
   obscura-platform/      hello.rs      Windows Hello, file permissions
   obscura-webauthn/      imp.rs        Windows WebAuthn PRF
+                         prompt.rs     brings the Windows security prompt forward
                          stub.rs       everything else
   obscura-cli/           args.rs main.rs prompt.rs banner.rs
                          tui.rs        the terminal browser
