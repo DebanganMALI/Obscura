@@ -72,8 +72,8 @@ The same vault from a terminal. `obscura` on its own opens a browsable view;
 - **Secrets kept out of swap** — the vault key and every password, note, field
   and two-factor secret sit in pages locked with `VirtualLock` or `mlock`, and
   crash dumps leave them out
-- **TOTP codes**, a password generator, CSV import from other managers, and
-  encrypted export
+- **TOTP codes**, a password generator, CSV import from other managers, and a
+  plain-text export for moving to another manager
 - **Auto-lock on idle**, timed against both a monotonic and a wall clock, so a
   machine that slept through the timeout still locks
 - **Clipboard copies that clear themselves** and opt out of Windows clipboard
@@ -242,8 +242,9 @@ door; it opens exactly the same lock.
 
 ```
 master password ──Argon2id(salt)──────> slot key ─┐
-recovery code ──X25519 + ML-KEM-768 ──────────────┼──> VAULT KEY ──┬─> entry keys
-passkey ──WebAuthn PRF(salt from vault id)────────┘                └─> watermark key
+recovery code ──X25519 + ML-KEM-768 ──────────────┤
+Windows Hello ──signature, X25519 + ML-KEM-768 ───┼──> VAULT KEY ──┬─> entry keys
+passkey ──WebAuthn PRF, X25519 + ML-KEM-768 ──────┘                └─> watermark key
 ```
 
 That indirection is why changing your master password is instant on a vault of
@@ -362,7 +363,7 @@ Planned for 0.2.0, roughly in this order:
 - [x] A password health view: reused, weak and old passwords, computed locally
 - [x] Lock secret memory pages with `VirtualLock` and `mlock`, so keys cannot be
       written to swap
-- [ ] A written threat model, and a security posture document mapped to the
+- [x] A written threat model, and a security posture document mapped to the
       ISO/IEC 27001:2022 Annex A controls that apply to a single application
 
 Later: Unicode normalisation of master passwords, which needs a migration path
@@ -371,6 +372,12 @@ so existing non-ASCII passwords keep working.
 ## Security
 
 Report vulnerabilities as described in [SECURITY.md](SECURITY.md).
+
+[docs/threat-model.md](docs/threat-model.md) names the attackers Obscura is
+built against, what answers each threat and what risk remains.
+[docs/security-posture.md](docs/security-posture.md) walks all 93 controls of
+ISO/IEC 27001:2022 Annex A and says which apply to a single offline
+application, with the evidence for each.
 
 Obscura collects nothing and makes no network requests. See
 [docs/privacy-policy.md](docs/privacy-policy.md).

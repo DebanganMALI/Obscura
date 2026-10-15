@@ -108,10 +108,11 @@ bound to the vault it belongs to.
 ```
 master password ──Argon2id(salt, kdf)──> slot key ─┐
                                                    │
-recovery code ──decode──> hybrid secret key ───────┼──unwraps──> VAULT KEY
-                          X25519 + ML-KEM-768      │             32 bytes
-                                                   │
-passkey ──WebAuthn PRF(salt = HKDF(vault_id))──────┘
+recovery code ──decode────────────┐                │
+Windows Hello ──HKDF(signature)───┼─> hybrid ──────┼──unwraps──> VAULT KEY
+passkey ──PRF(HKDF(vault_id))─────┘   secret key                 32 bytes
+                                      X25519 +
+                                      ML-KEM-768
                                                                      │
                                           ┌──────────────────────────┤
                                           │                          │
@@ -125,6 +126,11 @@ passkey ──WebAuthn PRF(salt = HKDF(vault_id))──────┘
                                                         keyed BLAKE3 over
                                                         vault_id || revision
 ```
+
+Recovery codes, Windows Hello and passkeys all end in the same place: a 32-byte
+seed that becomes a hybrid X25519 + ML-KEM-768 identity, and the slot holds the
+vault key wrapped to that identity. Only the master password unwraps its slot
+directly.
 
 Three things follow from that diagram:
 
@@ -206,7 +212,9 @@ crates/
     recovery.rs          printed recovery codes and their checksum
     generator.rs         password and passphrase generation
     csv_import.rs        importing from other managers
-    portable.rs          encrypted export and import
+    policy.rs            the master password rules and the strength meter
+    health.rs            reused, weak and year-old passwords
+    portable.rs          plain-text export and import
     secret.rs            SecretString, locked and zeroized on drop
 
   obscura-memlock/       lib.rs        counted page locks, process hardening
@@ -215,7 +223,8 @@ crates/
   obscura-platform/      hello.rs      Windows Hello, file permissions
   obscura-webauthn/      imp.rs        Windows WebAuthn PRF
                          stub.rs       everything else
-  obscura-cli/           args.rs main.rs prompt.rs
+  obscura-cli/           args.rs main.rs prompt.rs banner.rs
+                         tui.rs        the terminal browser
 
 src-tauri/
   commands.rs            every command the interface can call
@@ -227,7 +236,8 @@ src-tauri/
 
 ui/                      index.html  styles.css  app.js  logic.js
 ui-tests/                the interface's tests, run with node --test
-docs/                    this file, passkeys, testing, mutation testing
+docs/                    this file, the threat model, the security posture,
+                         passkeys, testing, mutation testing, privacy
 packaging/windows/       MSIX manifest and build script
 ```
 
@@ -254,5 +264,7 @@ disk it sits on.
 - **No network code of any kind.** Not a disabled feature - the application has
   no HTTP client, and the interface's content security policy is
   `default-src 'none'`.
-- **No agent, no unlock cache, no IPC socket.** The CLI prompts and forgets.
+- **No agent, no unlock cache, no IPC socket.** The CLI's `list`, `get` and
+  `totp` prompt and forget; its browser holds the vault only until it quits or
+  locks on idle, and nothing else can ask it for anything.
 - **No plugin surface.** Nothing loads code at runtime.
