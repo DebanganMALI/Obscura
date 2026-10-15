@@ -59,13 +59,13 @@ but neither was recorded anywhere:
   stays untested on purpose. `exclude_from_monitoring` is the security-relevant
   part and it is not reachable without a real clipboard.
 
-## Decisions still open
+## Decisions since settled
 
-- `MIN_PASSWORD_LEN` is 8, measured in **bytes**. Two emoji pass. Comparable
-  projects sit at 12 or more. `check_new_password` is the single place to change
-  it. Current behaviour is pinned by test, not endorsed by it.
-- `obscura-cli` is a 144-byte stub at 0%. See `release-blockers.md`.
-- `brain.md` has been stale since `77aacf8`.
+- The master password minimum was 8, measured in **bytes**, so two emoji
+  passed. Settled: at least 15 characters counted as characters, with checks
+  against common passwords and patterns, in `policy.rs`.
+- `obscura-cli` was a 144-byte stub. Settled: built out into the browser and
+  the scripted commands; see `release-blockers.md`.
 - The interface had no tests at all. Decided: every decision the interface
   makes without touching the page now lives in `ui/logic.js` and is tested with
   `node --test`, still with no npm dependencies. The page wiring in `app.js` is
