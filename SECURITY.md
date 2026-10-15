@@ -67,7 +67,8 @@ you ask not to be.
 | Password key derivation | Argon2id, calibrated to the machine at vault creation |
 | Content encryption | XChaCha20-Poly1305, one key per entry |
 | Key derivation | HKDF-SHA512 |
-| Recovery code wrapping | Hybrid X25519 + ML-KEM-768 |
+| Key wrapping for recovery codes, Windows Hello and passkeys | Hybrid X25519 + ML-KEM-768 |
+| Windows Hello | HKDF-SHA512 over a signature from a Windows Hello key |
 | Phone passkeys | WebAuthn PRF, salted from the vault id |
 | Rollback watermark | Keyed BLAKE3 MAC |
 | Recovery code checksum | Keyed BLAKE3 hash |
@@ -81,7 +82,8 @@ so any edit to the header makes the body fail to decrypt.
 
 Vault contents at rest are protected by symmetric primitives, which are already
 quantum-resistant at these key sizes. The post-quantum hybrid is applied where
-it matters - asymmetric key wrapping, which today means printed recovery codes.
+it matters - asymmetric key wrapping, which means every unlock method other than
+the master password: recovery codes, Windows Hello and phone passkeys.
 
 [docs/architecture.md](docs/architecture.md) has the byte layout and the full
 key hierarchy.
@@ -151,7 +153,16 @@ same way and has its own SBOM, `obscura-cli_<tag>.cdx.json`.
   reason it does not reach runtime code
 - Dependabot watches the Cargo lockfile and the GitHub Actions in use
 - `main` accepts changes only through pull requests that pass formatting,
-  Clippy, the test suite on Windows and Linux, and `cargo deny`
+  Clippy, the Rust and interface test suites on Windows and Linux,
+  `cargo deny` and gitleaks
+
+## Threat model and posture
+
+[docs/threat-model.md](docs/threat-model.md) lists the assets, trust
+boundaries and attackers, every threat with the code that answers it, and the
+risk that remains. [docs/security-posture.md](docs/security-posture.md) maps the
+project against ISO/IEC 27001:2022 Annex A; Obscura is not certified and does
+not claim to be.
 
 ## Known limitations
 
