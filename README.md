@@ -367,3 +367,6 @@ GPL-3.0-or-later. See [LICENSE](LICENSE).
 
 Built by [Debangan Mali](https://github.com/DebanganMALI), who also wrote
 [Salt-miner](https://github.com/DebanganMALI/Salt-miner).
+
+Contact: [debanganmali.ai@yahoo.com](mailto:debanganmali.ai@yahoo.com). For a
+vulnerability, use the private route in [SECURITY.md](SECURITY.md) instead.
