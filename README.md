@@ -85,6 +85,10 @@ The same vault from a terminal. `obscura` on its own opens a browsable view;
 
 ## Install
 
+On Windows, the simplest way is the [Microsoft Store](https://apps.microsoft.com/detail/9PB5FVD26LPM).
+The Store build is signed by Microsoft, so there is no SmartScreen warning,
+and it updates itself.
+
 Installers are attached to each [release](https://github.com/DebanganMALI/Obscura/releases).
 
 | Platform | File |
