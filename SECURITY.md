@@ -159,6 +159,8 @@ same way and has its own SBOM, `obscura-cli_<tag>.cdx.json`.
   every pull request; each ignored advisory is listed in `deny.toml` with the
   reason it does not reach runtime code
 - Dependabot watches the Cargo lockfile and the GitHub Actions in use
+- Every GitHub Action is pinned to a full commit hash, with its version beside
+  it, so a tag moved upstream cannot change what a build runs
 - `main` accepts changes only through pull requests that pass formatting,
   Clippy, the Rust and interface test suites on Windows and Linux,
   `cargo deny` and gitleaks
@@ -186,9 +188,6 @@ not claim to be.
   An attacker who can delete it gets a vault that looks new to Obscura.
 - The common-password list is a fixed snapshot. It is not a check against a
   breach corpus such as Have I Been Pwned, which would need a network request.
-- Master passwords are not Unicode-normalised, so the same password typed with
-  a different input method can produce different bytes and fail to unlock.
-  Normalising now would lock out existing vaults with non-ASCII passwords.
 - Browsing the vault with `obscura` keeps the vault key in memory until you
   quit or it locks on idle. It is not an agent: there is no socket, no daemon
   and nothing cached on disk.

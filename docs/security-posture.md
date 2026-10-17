@@ -29,11 +29,11 @@ from attackers rather than controls.
 
 | Theme | Controls | Met | Partly | Open | Not applicable |
 | --- | --- | --- | --- | --- | --- |
-| 5 Organisational | 37 | 23 | 4 | 1 | 9 |
+| 5 Organisational | 37 | 24 | 3 | 1 | 9 |
 | 6 People | 8 | 1 | 0 | 0 | 7 |
 | 7 Physical | 14 | 4 | 0 | 0 | 10 |
-| 8 Technological | 34 | 21 | 4 | 0 | 9 |
-| **Total** | **93** | **49** | **8** | **1** | **35** |
+| 8 Technological | 34 | 22 | 3 | 0 | 9 |
+| **Total** | **93** | **51** | **6** | **1** | **35** |
 
 ## 5 Organisational controls
 
@@ -59,7 +59,7 @@ from attackers rather than controls.
 | 5.18 Access rights | Met | Adding or removing an unlock method needs an unlocked vault; resetting the master password needs a session opened by recovery code; the last portable method cannot be removed |
 | 5.19 Security in supplier relationships | Met | Crates are the suppliers. `cargo deny` checks their advisories, licences and sources on every pull request |
 | 5.20 Security in supplier agreements | Not applicable | Open-source licences are the only agreements, and they are checked under 5.32 |
-| 5.21 ICT supply chain | Partly | `Cargo.lock` committed; unknown registries and git sources refused; SBOMs and provenance attested. GitHub Actions are pinned by version tag rather than commit hash |
+| 5.21 ICT supply chain | Met | `Cargo.lock` committed; unknown registries and git sources refused; SBOMs and provenance attested. Every GitHub Action is pinned to a full commit hash, with its version beside it so Dependabot can keep it current |
 | 5.22 Monitoring supplier services | Met | Dependabot watches the lockfile and the actions weekly; its updates are folded into reviewed commits rather than merged directly |
 | 5.23 Use of cloud services | Partly | GitHub hosts the source, the builds and the releases, and the Microsoft Store will distribute the signed package. The application uses no cloud service, and warns when a vault is placed in a syncing folder |
 | 5.24 Incident management planning | Met | SECURITY.md: private reporting through GitHub Security Advisories |
@@ -124,7 +124,7 @@ summary counts each control once.
 | 8.10 Information deletion | Met | Secrets are zeroized on drop; copied values clear themselves; removing an unlock method revokes it, and removing Windows Hello also deletes its key from Windows |
 | 8.11 Data masking | Met | Passwords are masked, and only their length is shown; lists never include a password; secret types print as redacted |
 | 8.12 Data leakage prevention | Met | No network code; clipboard exclusions; a content security policy that forbids connections; locked pages for secrets |
-| 8.13 Information backup | Partly | Each save keeps the previous vault as `.bak`, and an export moves entries to any manager. Off-machine backup is left to the user, and the README asks for it |
+| 8.13 Information backup | Met | Each save keeps the previous vault as `.bak`. Settings saves an encrypted copy of the vault to any disk, and the application reminds when there is no copy or the last one is a month old. An export moves entries to any manager |
 | 8.14 Redundancy of processing facilities | Not applicable | No facilities. Several unlock methods give redundancy of access instead |
 | 8.15 Logging | Not applicable | Deliberately no logs and no telemetry; a log of what was opened when would itself be sensitive |
 | 8.16 Monitoring activities | Not applicable | Nothing runs as a service. The repository is monitored by Dependabot and gitleaks |
@@ -151,12 +151,8 @@ summary counts each control once.
 
 Gathered from the tables above, in the order they will be addressed.
 
-1. **Pin GitHub Actions by commit hash** (5.21). Dependabot already understands
-   pinned hashes and will keep them current.
-2. **An independent review** (5.35). Most likely of the file format and the
+1. **An independent review** (5.35). Most likely of the file format and the
    unlock paths first, since that is where a mistake costs the most.
-3. **Code signing for direct downloads** (8.7, 8.19). Waits on a signing route
+2. **Code signing for direct downloads** (8.7, 8.19). Waits on a signing route
    open to an individual developer in India; until then the Store is the
    signed route.
-4. **Off-machine backup** (8.13). A reminder in the application, without any
-   network code.
