@@ -332,6 +332,27 @@ test("shortcuts need control or command, and only lock works outside the vault",
   assert.equal(L.shortcut({ key: "x", ctrlKey: true }, true), null);
 });
 
+test("a vault with entries and no copy is reminded, an empty one is not", () => {
+  assert.match(L.copyReminder(null, 3), /never been copied/);
+  assert.match(L.copyReminder(undefined, 3), /never been copied/);
+  assert.equal(L.copyReminder(null, 0), null);
+  assert.equal(L.copyReminder(400, 0), null);
+});
+
+test("a copy is fresh for thirty days and stale from then on", () => {
+  assert.equal(L.copyReminder(0, 5), null);
+  assert.equal(L.copyReminder(29, 5), null);
+  assert.match(L.copyReminder(30, 5), /30 days old/);
+  assert.match(L.copyReminder(400, 5), /400 days old/);
+});
+
+test("the age of the last copy reads the way a person would say it", () => {
+  assert.equal(L.copyAge(null), "No copy saved yet.");
+  assert.equal(L.copyAge(0), "Last copy saved today.");
+  assert.equal(L.copyAge(1), "Last copy saved yesterday.");
+  assert.equal(L.copyAge(12), "Last copy saved 12 days ago.");
+});
+
 test("the logic module cannot be changed from outside", () => {
   assert.ok(Object.isFrozen(L));
 });

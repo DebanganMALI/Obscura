@@ -1,4 +1,5 @@
 use std::{
+    collections::BTreeMap,
     fs,
     path::{Path, PathBuf},
 };
@@ -31,6 +32,8 @@ struct Stored {
     vault_path: Option<String>,
     #[serde(default)]
     auto_lock_secs: Option<u64>,
+    #[serde(default)]
+    copies: BTreeMap<String, i64>,
 }
 
 fn pointer_file<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> Result<PathBuf, String> {
@@ -110,6 +113,35 @@ pub fn remember_auto_lock<R: tauri::Runtime>(
 pub fn remember_auto_lock_in(file: &Path, seconds: u64) -> Result<(), String> {
     let mut stored = load_from(file);
     stored.auto_lock_secs = Some(seconds);
+    save_to(file, &stored)
+}
+
+#[must_use]
+pub fn last_copy<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    vault_id: uuid::Uuid,
+) -> Option<i64> {
+    pointer_file(app)
+        .ok()
+        .and_then(|file| last_copy_in(&file, vault_id))
+}
+
+#[must_use]
+pub fn last_copy_in(file: &Path, vault_id: uuid::Uuid) -> Option<i64> {
+    load_from(file).copies.get(&vault_id.to_string()).copied()
+}
+
+pub fn remember_copy<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    vault_id: uuid::Uuid,
+    at: i64,
+) -> Result<(), String> {
+    remember_copy_in(&pointer_file(app)?, vault_id, at)
+}
+
+pub fn remember_copy_in(file: &Path, vault_id: uuid::Uuid, at: i64) -> Result<(), String> {
+    let mut stored = load_from(file);
+    stored.copies.insert(vault_id.to_string(), at);
     save_to(file, &stored)
 }
 
@@ -378,6 +410,49 @@ mod remembering {
             "whitespace resolves to the working directory, so the gate would offer to unlock a \
              vault that is not there"
         );
+
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn a_copy_is_remembered_per_vault_and_leaves_the_other_settings_alone() {
+        let dir = scratch();
+        let file = dir.join("settings.json");
+        let first = uuid::Uuid::new_v4();
+        let second = uuid::Uuid::new_v4();
+
+        remember_auto_lock_in(&file, 600).unwrap();
+        remember_in(&file, Path::new("D:/vaults/personal.obscura")).unwrap();
+        assert!(last_copy_in(&file, first).is_none());
+
+        remember_copy_in(&file, first, 1_700_000_000).unwrap();
+
+        assert_eq!(last_copy_in(&file, first), Some(1_700_000_000));
+        assert!(last_copy_in(&file, second).is_none());
+        assert_eq!(remembered_auto_lock_in(&file), Some(600));
+        assert_eq!(
+            remembered_in(&file).unwrap(),
+            PathBuf::from("D:/vaults/personal.obscura")
+        );
+
+        remember_copy_in(&file, first, 1_700_100_000).unwrap();
+        assert_eq!(last_copy_in(&file, first), Some(1_700_100_000));
+
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn a_settings_file_from_before_copies_were_kept_still_reads() {
+        let dir = scratch();
+        let file = dir.join("settings.json");
+        fs::write(
+            &file,
+            br#"{ "vaultPath": "D:/vaults/personal.obscura", "autoLockSecs": 300 }"#,
+        )
+        .unwrap();
+
+        assert_eq!(remembered_auto_lock_in(&file), Some(300));
+        assert!(last_copy_in(&file, uuid::Uuid::new_v4()).is_none());
 
         fs::remove_dir_all(&dir).unwrap();
     }

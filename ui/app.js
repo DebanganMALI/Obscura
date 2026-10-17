@@ -11,6 +11,7 @@ const state = {
   selected: null,
   editing: null,
   totpTimer: null,
+  copyLater: false,
 };
 
 function h(tag, className, text) {
@@ -405,6 +406,10 @@ function wipe() {
   state.entries = [];
   state.selected = null;
   state.editing = null;
+  state.copyLater = false;
+  $("copy-nudge").hidden = true;
+  $("copy-nudge-text").textContent = "";
+  $("s-copy-age").textContent = "";
 
   document.querySelectorAll(".scrim").forEach((scrim) => {
     scrim.hidden = true;
@@ -451,7 +456,53 @@ async function refresh() {
   $("entry-count").textContent = L.entryCount(state.entries.length);
   renderList();
   renderDetail();
+  paintCopyNudge();
 }
+
+async function paintCopyNudge() {
+  const nudge = $("copy-nudge");
+  if (state.copyLater || !state.info) {
+    nudge.hidden = true;
+    return;
+  }
+  let status;
+  try {
+    status = await invoke("copy_status");
+  } catch {
+    nudge.hidden = true;
+    return;
+  }
+  const message = state.info ? L.copyReminder(status.daysSince, state.info.entryCount) : null;
+  $("copy-nudge-text").textContent = message || "";
+  nudge.hidden = !message;
+}
+
+async function saveCopy(button, error) {
+  if (error) error.textContent = "";
+  button.disabled = true;
+  try {
+    const result = await invoke("copy_vault");
+    if (!result) return;
+    $("s-copy-age").textContent = L.copyAge(result.daysSince);
+    toast("Copy saved to " + result.path);
+    await paintCopyNudge();
+  } catch (err) {
+    if (L.isLocked(err)) return leaveApp("Locked. Unlock to continue.");
+    if (error) error.textContent = L.errText(err);
+    else toast(L.errText(err), "warn");
+  } finally {
+    button.disabled = false;
+  }
+}
+
+$("copy-nudge-save").addEventListener("click", () => saveCopy($("copy-nudge-save"), null));
+
+$("copy-nudge-later").addEventListener("click", () => {
+  state.copyLater = true;
+  $("copy-nudge").hidden = true;
+});
+
+$("s-copy").addEventListener("click", () => saveCopy($("s-copy"), $("s-backup-error")));
 
 function renderList() {
   const list = $("list");
@@ -961,6 +1012,12 @@ async function openSettings() {
       : "No - Obscura will ask at next launch";
   } catch {
     $("s-remembered").textContent = "Unknown";
+  }
+  try {
+    const status = await invoke("copy_status");
+    $("s-copy-age").textContent = L.copyAge(status.daysSince);
+  } catch {
+    $("s-copy-age").textContent = "";
   }
   $("settings-scrim").hidden = false;
 }

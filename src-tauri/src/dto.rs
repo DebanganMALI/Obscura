@@ -52,6 +52,19 @@ pub struct ExportResult {
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct CopyResult {
+    pub path: String,
+    pub days_since: Option<u64>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CopyStatus {
+    pub days_since: Option<u64>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ImportResult {
     pub path: String,
     pub source: String,

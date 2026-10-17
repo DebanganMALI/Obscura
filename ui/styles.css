@@ -401,7 +401,21 @@ button { cursor: pointer; background: none; border: none; }
 .meter__seg.on-fair   { background: var(--warn); }
 .meter__seg.on-strong { background: var(--ok); }
 
-#app { height: 100%; display: grid; grid-template-rows: auto 1fr; }
+#app { height: 100%; display: grid; grid-template-rows: auto auto 1fr; }
+#app > .layout { grid-row: 3; }
+
+.nudge {
+  grid-row: 2;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--line-soft);
+  color: var(--text-dim);
+  font-size: 13px;
+}
+.nudge__text { flex: 1; min-width: 0; }
 
 .topbar {
   display: flex;

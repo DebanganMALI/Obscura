@@ -32,6 +32,8 @@ pub fn run() {
             commands::relocate_vault,
             commands::export_entries,
             commands::import_entries,
+            commands::copy_vault,
+            commands::copy_status,
             commands::calibrate,
             commands::create_vault,
             commands::unlock,
