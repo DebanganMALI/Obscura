@@ -1,9 +1,11 @@
 use std::{
+    borrow::Cow,
     fs,
     io::Write as _,
     path::{Path, PathBuf},
 };
 
+use icu_normalizer::ComposingNormalizerBorrowed;
 use obscura_crypto::{
     aead, derive,
     hybrid::{self, HybridSecretKey},
@@ -90,7 +92,7 @@ impl Vault {
             created_at: now,
         };
 
-        let kek = kdf::derive_key(password, &salt, kdf_params)?;
+        let kek = password_key(password, &salt, kdf_params)?;
         slot.wrapped_key = aead::seal(&kek, &slot.aad(vault_id), vault_key.expose())?;
 
         Ok(Self {
@@ -320,7 +322,7 @@ impl Vault {
         params.validate()?;
 
         let salt = kdf::random_salt()?;
-        let kek = kdf::derive_key(new_password, &salt, params)?;
+        let kek = password_key(new_password, &salt, params)?;
 
         let vault_id = self.header.vault_id;
         let mut rewrapped = 0usize;
@@ -354,7 +356,7 @@ impl Vault {
         params.validate()?;
 
         let salt = kdf::random_salt()?;
-        let kek = kdf::derive_key(password, &salt, params)?;
+        let kek = password_key(password, &salt, params)?;
 
         let mut slot = KeySlot {
             id: Uuid::new_v4(),
@@ -491,10 +493,14 @@ fn unlock(
 ) -> Result<SecretKey, VaultError> {
     match credential {
         Credential::Password(password) => {
-            let kek = kdf::derive_key(password, &header.salt, kdf_params)?;
-            for slot in header.slots.iter().filter(|s| s.kind == SlotKind::Password) {
-                if let Ok(bytes) = aead::open(&kek, &slot.aad(header.vault_id), &slot.wrapped_key) {
-                    return Ok(SecretKey::try_from_slice(&bytes, "vault key")?);
+            let kek = password_key(password, &header.salt, kdf_params)?;
+            if let Some(key) = open_password_slot(header, &kek)? {
+                return Ok(key);
+            }
+            if normalized(password).is_some() {
+                let legacy = kdf::derive_key(password, &header.salt, kdf_params)?;
+                if let Some(key) = open_password_slot(header, &legacy)? {
+                    return Ok(key);
                 }
             }
             Err(VaultError::NoMatchingSlot)
@@ -510,6 +516,40 @@ fn unlock(
             Err(VaultError::NoMatchingSlot)
         }
     }
+}
+
+fn normalized(password: &[u8]) -> Option<Zeroizing<Vec<u8>>> {
+    let text = core::str::from_utf8(password).ok()?;
+    match ComposingNormalizerBorrowed::new_nfkc().normalize(text) {
+        Cow::Borrowed(_) => None,
+        Cow::Owned(form) => {
+            let form = Zeroizing::new(form.into_bytes());
+            let differs = form.as_slice() != password;
+            differs.then_some(form)
+        }
+    }
+}
+
+fn password_key(
+    password: &[u8],
+    salt: &[u8; kdf::SALT_LEN],
+    params: KdfParams,
+) -> Result<SecretKey, VaultError> {
+    let form = normalized(password);
+    let input = form.as_deref().map_or(password, Vec::as_slice);
+    Ok(kdf::derive_key(input, salt, params)?)
+}
+
+fn open_password_slot(
+    header: &VaultHeader,
+    kek: &SecretKey,
+) -> Result<Option<SecretKey>, VaultError> {
+    for slot in header.slots.iter().filter(|s| s.kind == SlotKind::Password) {
+        if let Ok(bytes) = aead::open(kek, &slot.aad(header.vault_id), &slot.wrapped_key) {
+            return Ok(Some(SecretKey::try_from_slice(&bytes, "vault key")?));
+        }
+    }
+    Ok(None)
 }
 
 fn entry_key(vault_key: &SecretKey, entry_id: Uuid) -> Result<SecretKey, VaultError> {
@@ -542,6 +582,83 @@ mod tests {
     fn the_format_the_writer_stamps_is_the_one_the_reader_expects() {
         assert_eq!(format_version(), 1);
         assert_eq!(prefix_len(), 14);
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod normalization {
+    use super::*;
+
+    const FAST: KdfParams = KdfParams {
+        m_cost_kib: 64 * 1024,
+        t_cost: 2,
+        p_cost: 1,
+    };
+
+    const COMPOSED: &str = "caf\u{e9} au lait on a quiet morning";
+    const DECOMPOSED: &str = "cafe\u{301} au lait on a quiet morning";
+
+    fn opens(bytes: &[u8], password: &str) -> bool {
+        Vault::from_bytes(bytes, &Credential::Password(password.as_bytes()), None).is_ok()
+    }
+
+    #[test]
+    fn the_same_password_typed_two_ways_opens_the_vault() {
+        let mut vault = Vault::create(COMPOSED.as_bytes(), FAST).unwrap();
+        let bytes = vault.to_bytes().unwrap();
+        assert!(opens(&bytes, COMPOSED));
+        assert!(opens(&bytes, DECOMPOSED));
+        assert!(!opens(&bytes, "cafe au lait on a quiet morning"));
+    }
+
+    #[test]
+    fn compatibility_characters_fold_to_their_plain_form() {
+        let mut vault =
+            Vault::create("\u{fb01}ve quiet orbits over tamarind".as_bytes(), FAST).unwrap();
+        let bytes = vault.to_bytes().unwrap();
+        assert!(opens(&bytes, "five quiet orbits over tamarind"));
+    }
+
+    #[test]
+    fn a_vault_sealed_with_the_raw_bytes_still_opens_with_them() {
+        let mut vault = Vault::create(b"placeholder password for the slot", FAST).unwrap();
+        let salt = kdf::random_salt().unwrap();
+        let raw = kdf::derive_key(DECOMPOSED.as_bytes(), &salt, FAST).unwrap();
+        let vault_id = vault.header.vault_id;
+        for slot in &mut vault.header.slots {
+            if slot.kind == SlotKind::Password {
+                slot.wrapped_key =
+                    aead::seal(&raw, &slot.aad(vault_id), vault.key.expose()).unwrap();
+            }
+        }
+        vault.header.salt = salt;
+        vault.header.kdf = StoredKdf::from(FAST);
+        let bytes = vault.to_bytes().unwrap();
+        assert!(opens(&bytes, DECOMPOSED));
+    }
+
+    #[test]
+    fn a_changed_password_is_stored_in_its_normal_form() {
+        let mut vault = Vault::create(b"correct horse battery staple", FAST).unwrap();
+        vault.change_password(DECOMPOSED.as_bytes(), None).unwrap();
+        let bytes = vault.to_bytes().unwrap();
+        assert!(opens(&bytes, COMPOSED));
+    }
+
+    #[test]
+    fn a_password_that_is_not_text_is_used_as_it_is() {
+        let password = b"\xff\xfe not valid utf-8 but still a password";
+        let mut vault = Vault::create(password, FAST).unwrap();
+        let bytes = vault.to_bytes().unwrap();
+        assert!(Vault::from_bytes(&bytes, &Credential::Password(password), None).is_ok());
+    }
+
+    #[test]
+    fn text_already_in_normal_form_is_left_alone() {
+        assert!(normalized(COMPOSED.as_bytes()).is_none());
+        assert!(normalized(b"correct horse battery staple").is_none());
+        assert!(normalized(DECOMPOSED.as_bytes()).is_some());
     }
 }
 
