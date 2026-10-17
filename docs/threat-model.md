@@ -103,7 +103,7 @@ make A9's job harder on Linux, but no promise is made against it.
 | T4 | A3 crafts a file to crash or exhaust Obscura | Header length capped at 1 MiB, Argon2id memory at 2 GiB and passes at 16. Five fuzz targets cover the header, whole vaults, exports, CSV and recovery codes; every truncation of a vault is tested to fail cleanly | A vault at the upper bounds still costs real memory and time to try, by design |
 | T5 | A crash or full disk mid-save corrupts the vault | Every entry is validated before anything is written; the vault is written to a temporary file and renamed over the original, and the previous version is kept as `.bak` | None known |
 | T6 | A3's import leaves the vault half-changed | An import is validated and renumbered as a batch and committed in one step; a failure leaves the vault untouched. Field sizes are bounded | None known |
-| T7 | A7 ships a malicious dependency or action | `Cargo.lock` is committed; `cargo deny` checks advisories, licences and sources on every pull request and refuses unknown registries and git sources; Dependabot reports updates, which are folded into reviewed commits | Actions are pinned by version tag, not by commit hash. The release build installs `tauri-cli` from crates.io at build time |
+| T7 | A7 ships a malicious dependency or action | `Cargo.lock` is committed; `cargo deny` checks advisories, licences and sources on every pull request and refuses unknown registries and git sources; every GitHub Action is pinned to a full commit hash; Dependabot reports updates, which are folded into reviewed commits | The release build installs `tauri-cli` from crates.io at build time |
 
 ### Repudiation
 
@@ -166,8 +166,8 @@ each.
 | A master password that meets the rules but is still guessable | Accepted. The rules follow NIST SP 800-63B-4; the strength meter shows how strong a password is beyond the minimum |
 | The rollback watermark can be deleted | Accepted for now. A stronger anchor would need somewhere the attacker cannot write, which a local application does not have |
 | Not independently audited | Open. Stated at the top of the README |
-| Actions pinned by tag, not commit hash | Open. To be pinned by hash |
+| Actions pinned by tag, not commit hash | Closed in 0.2.1. Every action is pinned to a full commit hash |
 | Single maintainer | Accepted. Every change still goes through a pull request and the same checks |
 | The plain-text export | Accepted. It is labelled as plain text where it is made |
 | Hibernation and what the web view displays | Accepted. Outside what an application can control |
-| Master passwords are not Unicode-normalised | Open. Needs a migration path so existing vaults keep opening |
+| Master passwords are not Unicode-normalised | Closed in 0.2.1. Passwords are put into NFKC form; a vault whose password was set earlier still opens with exactly the characters it was set with |
