@@ -1,7 +1,7 @@
 # Threat model
 
 What Obscura protects, from whom, where the boundaries are, and what is left
-over once every defence below has done its job. It describes version 0.2.0 and
+over once every defence below has done its job. It describes version 0.2.1 and
 is revisited with every release that changes the file format, adds a way to
 unlock, or adds a boundary.
 
