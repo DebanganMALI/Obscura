@@ -142,6 +142,12 @@
     </button>
   </header>
 
+  <div class="nudge" id="copy-nudge" hidden>
+    <span class="nudge__text" id="copy-nudge-text"></span>
+    <button class="btn btn--ghost" type="button" id="copy-nudge-save">Save a copy</button>
+    <button class="btn btn--ghost" type="button" id="copy-nudge-later">Not now</button>
+  </div>
+
   <div class="layout">
     <aside class="list-pane">
       <div class="list-pane__head">
@@ -328,7 +334,15 @@
     <div class="section">
       <p class="section__label">Backup</p>
       <div class="card">
-        <p class="hint m-0">An export is every entry in one plain-text file - ids,
+        <p class="hint m-0">A copy of the vault file is still encrypted with your master
+          password. Keep one on a USB drive or another disk, so losing this computer does not
+          mean losing your passwords. Opening an older copy later asks you to confirm, because
+          an older file is exactly what a rollback attack looks like.</p>
+        <p class="hint" id="s-copy-age"></p>
+        <div class="row-inline mt-20">
+          <button class="btn btn--ghost" type="button" id="s-copy">Save a copy of the vault</button>
+        </div>
+        <p class="hint mt-20">An export is every entry in one plain-text file - ids,
           timestamps, tags, custom fields and two-factor secrets included. It is how you
           move off Obscura, and how your entries survive a change to the vault format.</p>
         <p class="hint">Import reads an Obscura export, or a CSV from Bitwarden, Chrome,

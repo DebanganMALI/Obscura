@@ -19,9 +19,10 @@ use zeroize::Zeroizing;
 use crate::{
     clipboard,
     dto::{
-        CustomFieldView, EntryDetail, EntryInput, EntrySummary, ExportResult, GeneratedPassword,
-        HealthItem, HealthReport, ImportResult, IssuedRecoveryCode, LocationProbe, PasswordCheck,
-        RelocateResult, SlotView, TotpCode, UnlockError, VaultInfo,
+        CopyResult, CopyStatus, CustomFieldView, EntryDetail, EntryInput, EntrySummary,
+        ExportResult, GeneratedPassword, HealthItem, HealthReport, ImportResult,
+        IssuedRecoveryCode, LocationProbe, PasswordCheck, RelocateResult, SlotView, TotpCode,
+        UnlockError, VaultInfo,
     },
     location,
     state::{AppState, Session},
@@ -939,6 +940,72 @@ pub fn export_entries<R: tauri::Runtime>(
         path: target.display().to_string(),
         entries: doc.entries.len(),
     }))
+}
+
+#[tauri::command(async)]
+pub fn copy_vault<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
+    state: State<'_, AppState>,
+) -> Result<Option<CopyResult>, String> {
+    let today = time::OffsetDateTime::now_utc().date();
+    let Some(target) = app
+        .dialog()
+        .file()
+        .set_title("Where should the copy of the vault go?")
+        .add_filter("Obscura vault", &["obscura"])
+        .set_file_name(format!("obscura-copy-{today}.obscura"))
+        .blocking_save_file()
+        .and_then(|file| file.into_path().ok())
+    else {
+        return Ok(None);
+    };
+
+    let vault_id = state.with_session(|session| {
+        if same_file(&session.path, &target) {
+            return Err("That is the vault itself. Choose another place for the copy.".to_owned());
+        }
+        std::fs::copy(&session.path, &target)
+            .map_err(|e| format!("cannot write {}: {e}", target.display()))?;
+        Ok(session.vault.id())
+    })?;
+
+    if !location::is_vault_file(&target) {
+        return Err("the copy did not write correctly to that location".to_owned());
+    }
+
+    location::remember_copy(
+        &app,
+        vault_id,
+        time::OffsetDateTime::now_utc().unix_timestamp(),
+    )?;
+
+    Ok(Some(CopyResult {
+        path: target.display().to_string(),
+        days_since: Some(0),
+    }))
+}
+
+#[tauri::command]
+pub fn copy_status<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
+    state: State<'_, AppState>,
+) -> Result<CopyStatus, String> {
+    let vault_id = state.with_session(|session| Ok(session.vault.id()))?;
+    let now = time::OffsetDateTime::now_utc().unix_timestamp();
+    Ok(CopyStatus {
+        days_since: location::last_copy(&app, vault_id).map(|at| days_between(at, now)),
+    })
+}
+
+fn days_between(then: i64, now: i64) -> u64 {
+    u64::try_from(now.saturating_sub(then)).unwrap_or(0) / 86_400
+}
+
+fn same_file(a: &std::path::Path, b: &std::path::Path) -> bool {
+    match (std::fs::canonicalize(a), std::fs::canonicalize(b)) {
+        (Ok(left), Ok(right)) => left == right,
+        _ => a == b,
+    }
 }
 
 #[tauri::command(async)]
@@ -2689,5 +2756,35 @@ mod read_only {
 
         let missing = warning_for(TargetState::Missing, true, false, false).unwrap();
         assert!(missing.contains("folder"), "{missing}");
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod copies {
+    use super::*;
+
+    #[test]
+    fn days_are_counted_whole_and_never_backwards() {
+        assert_eq!(days_between(0, 86_399), 0);
+        assert_eq!(days_between(0, 86_400), 1);
+        assert_eq!(days_between(1_000_000, 1_000_000 + 30 * 86_400), 30);
+        assert_eq!(days_between(2_000, 1_000), 0);
+    }
+
+    #[test]
+    fn the_vault_is_recognised_under_another_spelling_of_its_path() {
+        let dir = std::env::temp_dir().join(format!("obscura-copy-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let vault = dir.join("vault.obscura");
+        std::fs::write(&vault, b"sample").unwrap();
+
+        assert!(same_file(&vault, &dir.join(".").join("vault.obscura")));
+        assert!(!same_file(&vault, &dir.join("copy.obscura")));
+
+        std::fs::write(dir.join("copy.obscura"), b"sample").unwrap();
+        assert!(!same_file(&vault, &dir.join("copy.obscura")));
+
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 }
