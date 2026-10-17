@@ -264,6 +264,26 @@ const ObscuraLogic = (() => {
     return null;
   }
 
+  const COPY_REMINDER_DAYS = 30;
+
+  function copyReminder(daysSince, entryCount) {
+    if (!entryCount) return null;
+    if (daysSince === null || daysSince === undefined) {
+      return "This vault has never been copied anywhere else. Save a copy to a USB drive " +
+        "or another disk, so losing this computer does not mean losing your passwords.";
+    }
+    if (daysSince < COPY_REMINDER_DAYS) return null;
+    return "Your last copy of this vault is " + daysSince + " days old. Save a fresh one " +
+      "so it holds what you have added since.";
+  }
+
+  function copyAge(daysSince) {
+    if (daysSince === null || daysSince === undefined) return "No copy saved yet.";
+    if (daysSince === 0) return "Last copy saved today.";
+    if (daysSince === 1) return "Last copy saved yesterday.";
+    return "Last copy saved " + daysSince + " days ago.";
+  }
+
   return Object.freeze({
     meterBand,
     sentence,
@@ -295,6 +315,8 @@ const ObscuraLogic = (() => {
     healthSections,
     codeGroups,
     shortcut,
+    copyReminder,
+    copyAge,
   });
 })();
 
