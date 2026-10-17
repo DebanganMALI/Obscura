@@ -109,6 +109,13 @@ meter in the interface asks the same Rust code, so it cannot disagree with the
 check that decides. A vault made before these rules still opens with its
 existing password.
 
+A password is put into Unicode NFKC normal form before it reaches Argon2id, as
+SP 800-63B-4 recommends, so the same password typed on another keyboard or
+operating system, where an accented letter may arrive as two code points rather
+than one, still opens the vault. A vault whose password was set before 0.2.1
+still opens with exactly the characters it was set with; changing the password
+once stores it in normal form.
+
 ## Secrets in memory
 
 While a vault is open, the vault key and every password, note, custom field and

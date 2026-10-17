@@ -27,6 +27,7 @@ thiserror      = { workspace = true }
 ciborium       = { workspace = true }
 serde_json     = { workspace = true }
 csv            = { workspace = true }
+icu_normalizer = { workspace = true }
 
 [dev-dependencies]
 uuid           = { workspace = true }
