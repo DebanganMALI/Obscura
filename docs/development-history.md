@@ -18,10 +18,11 @@ primary record; every claim here can be checked against it.
 | 25 Sep 2026 | 0.1.0 and 0.1.1 released with CycloneDX SBOMs and build provenance |
 | 15 Oct 2026 | 0.2.0 released: password health, locked memory, threat model, ISO/IEC 27001 Annex A posture |
 | 16 Oct 2026 | Obscura Vault live on the Microsoft Store |
+| 17 Oct 2026 | 0.2.1 released: Unicode-normalised master passwords, encrypted vault copies, every GitHub Action pinned to a commit |
 
 Tests over the same period: 211 before the third audit, 271 after it, 345 once
-secrets moved into locked memory, and 346 Rust tests plus 40 interface tests at
-0.2.0, passing on Linux and Windows.
+secrets moved into locked memory, 346 Rust tests plus 40 interface tests at
+0.2.0, and 356 plus 43 at 0.2.1, passing on Linux and Windows.
 
 ## Phase 1 - foundations (15-16 September)
 
@@ -160,6 +161,31 @@ publisher, homepage, copyright and licence in the installers.
 
 The package passed certification and Obscura Vault went live on the Microsoft
 Store, signed by Microsoft, under the publisher name Debangan Mali.
+
+## Phase 8 - 0.2.1 (17 October)
+
+The day after the listing went live, three changes closed items that the threat
+model and the Annex A posture had left open.
+
+- **The same password typed two ways could fail to open the vault.** An
+  accented letter can be stored as one character or as a plain letter followed
+  by an accent mark, and different keyboards and systems produce different
+  forms. The master password is now normalised to Unicode NFKC before the key
+  is derived. Vaults whose password was set before the change still open: when
+  the normalised form differs from what was typed and does not open the vault,
+  the password exactly as typed is tried. Six tests pin both paths.
+- **There was no simple way to keep a second copy of a vault.** Settings now
+  saves an encrypted copy to a place the user chooses, refuses to write over the
+  open vault, checks that the result is a valid vault file, and shows a reminder
+  when there is no copy or the last one is a month old. This moved Annex A 8.13,
+  information backup, to Met.
+- **The workflows named GitHub Actions by version tag, which an action's owner
+  can move.** Every action in every workflow is now pinned to a full commit hash,
+  with its version beside it, and SBOM attestations moved to `actions/attest`.
+  This moved Annex A 5.21, ICT supply chain, to Met.
+
+0.2.1 was tagged the same day with checksums, SBOMs and build provenance, and
+the Store package 0.2.1.0 passed certification.
 
 ## What the history shows
 
