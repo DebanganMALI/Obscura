@@ -79,11 +79,8 @@ cached on disk, so no other process can ask it for anything. It locks on idle on
 the same timer as the desktop application, and wipes the clipboard on the way
 out.
 
-## Store submission, outstanding
+## Store submission - done
 
-Not release blockers - the GitHub release does not wait on these.
-
-- Screenshots, at least one at 1366x768 or larger
-- The age rating questionnaire
-- Submission deadline of roughly 19 December 2026, three months from the name
-  reservation
+The screenshots and the age rating questionnaire were completed, and Obscura
+Vault passed certification and went live on the Microsoft Store on
+16 October 2026, well inside the three months the name reservation allowed.

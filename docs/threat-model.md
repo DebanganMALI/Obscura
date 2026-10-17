@@ -91,7 +91,7 @@ make A9's job harder on Linux, but no promise is made against it.
 | S2 | A1 forges or swaps a key slot | Each slot's wrapped key is sealed with associated data naming the vault id and the slot id, and the whole header is the body's associated data. A failed unlock says only `NoMatchingSlot`, never which slot came close | None known |
 | S3 | A phishing site requests the passkey | The relying party id is fixed at `debanganmali.github.io`, and the PRF salt is derived from the vault id, so a passkey answers for one vault only (`obscura-webauthn`) | The relying party id is tied to the GitHub account name. Renaming the account would abandon every passkey |
 | S4 | A1 replays a Windows Hello slot on another machine | The Hello key never leaves the device that created it; the slot opens only where Windows can sign with that key | A Hello slot is as strong as the Windows sign-in that guards it |
-| S5 | A fake Obscura installer | Every release file carries a SHA-256 checksum, signed build provenance and an SBOM attestation in a public transparency log. Once published, the Store package is signed by Microsoft | Direct downloads are not code signed, so SmartScreen warns and a user who skips verification is trusting the download |
+| S5 | A fake Obscura installer | Every release file carries a SHA-256 checksum, signed build provenance and an SBOM attestation in a public transparency log. The Store package is signed by Microsoft | Direct downloads are not code signed, so SmartScreen warns and a user who skips verification is trusting the download |
 
 ### Tampering
 
