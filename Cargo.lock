@@ -2870,7 +2870,7 @@ dependencies = [
 
 [[package]]
 name = "obscura-app"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "arboard",
  "obscura-crypto",
@@ -2891,7 +2891,7 @@ dependencies = [
 
 [[package]]
 name = "obscura-cli"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "anyhow",
  "arboard",
@@ -2905,7 +2905,7 @@ dependencies = [
 
 [[package]]
 name = "obscura-crypto"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "argon2",
  "blake3",
@@ -2923,7 +2923,7 @@ dependencies = [
 
 [[package]]
 name = "obscura-memlock"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "libc",
  "windows-sys 0.61.2",
@@ -2931,7 +2931,7 @@ dependencies = [
 
 [[package]]
 name = "obscura-platform"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "obscura-crypto",
  "thiserror 2.0.21",
@@ -2940,7 +2940,7 @@ dependencies = [
 
 [[package]]
 name = "obscura-vault"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "ciborium",
  "csv",
@@ -2962,7 +2962,7 @@ dependencies = [
 
 [[package]]
 name = "obscura-webauthn"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "obscura-crypto",
  "thiserror 2.0.21",
