@@ -61,7 +61,7 @@ from attackers rather than controls.
 | 5.20 Security in supplier agreements | Not applicable | Open-source licences are the only agreements, and they are checked under 5.32 |
 | 5.21 ICT supply chain | Met | `Cargo.lock` committed; unknown registries and git sources refused; SBOMs and provenance attested. Every GitHub Action is pinned to a full commit hash, with its version beside it so Dependabot can keep it current |
 | 5.22 Monitoring supplier services | Met | Dependabot watches the lockfile and the actions weekly; its updates are folded into reviewed commits rather than merged directly |
-| 5.23 Use of cloud services | Partly | GitHub hosts the source, the builds and the releases, and the Microsoft Store will distribute the signed package. The application uses no cloud service, and warns when a vault is placed in a syncing folder |
+| 5.23 Use of cloud services | Partly | GitHub hosts the source, the builds and the releases, and the Microsoft Store distributes the signed package. The application uses no cloud service, and warns when a vault is placed in a syncing folder |
 | 5.24 Incident management planning | Met | SECURITY.md: private reporting through GitHub Security Advisories |
 | 5.25 Assessing security events | Met | Reports are triaged against the scope in SECURITY.md; Dependabot alerts that do not reach shipped code are dismissed with the reason recorded |
 | 5.26 Response to incidents | Met | Coordinated disclosure, 90 days by default, fixed in the latest release, reporter credited |
@@ -118,7 +118,7 @@ summary counts each control once.
 | 8.4 Access to source code | Met | The source is public to read; writes reach `main` only through pull requests with required checks; gitleaks scans the history for secrets |
 | 8.5 Secure authentication | Met | Argon2id calibrated per machine; four unlock methods, each unwrapping the same vault key; Windows Hello and phone passkeys through platform APIs; a failed unlock reveals nothing about which slot came close |
 | 8.6 Capacity management | Met | Argon2id is calibrated to the hardware, stored costs are bounded, and entry fields and headers have size limits |
-| 8.7 Protection against malware | Partly | The application loads no code and no remote content. Direct downloads are verifiable but not code signed; the Store package, once published, is signed by Microsoft |
+| 8.7 Protection against malware | Partly | The application loads no code and no remote content. Direct downloads are verifiable but not code signed; the Store package is signed by Microsoft |
 | 8.8 Management of technical vulnerabilities | Met | `cargo deny` advisories on every pull request, Dependabot alerts, each ignored advisory listed in `deny.toml` with its reason, and fixes shipped in the latest release |
 | 8.9 Configuration management | Met | Lockfile, toolchain, lints, `deny.toml`, the Tauri capability file and the content security policy are all in the repository, and a test fails if the policy is loosened |
 | 8.10 Information deletion | Met | Secrets are zeroized on drop; copied values clear themselves; removing an unlock method revokes it, and removing Windows Hello also deletes its key from Windows |
