@@ -11,12 +11,6 @@ yanked  = "deny"
 
 ignore = [
   { id = "RUSTSEC-2024-0370", reason = "proc-macro-error: build-time only, via gtk-rs 0.18; no runtime code" },
-
-  { id = "RUSTSEC-2025-0075", reason = "unic-char-range: unmaintained, via urlpattern -> tauri-utils" },
-  { id = "RUSTSEC-2025-0080", reason = "unic-common: unmaintained, via urlpattern -> tauri-utils" },
-  { id = "RUSTSEC-2025-0081", reason = "unic-char-property: unmaintained, via urlpattern -> tauri-utils" },
-  { id = "RUSTSEC-2025-0098", reason = "unic-ucd-version: unmaintained, via urlpattern -> tauri-utils" },
-  { id = "RUSTSEC-2025-0100", reason = "unic-ucd-ident: unmaintained, via urlpattern -> tauri-utils" },
 ]
 
 [licenses]
